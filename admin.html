@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Administration — SGCI</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --primary: #0C4A0C; --accent: #F47920; --gold: #FFD000;
+    --bg: #F5F5F5; --white: #FFFFFF; --gray: #6B7280; --gray-l: #E5E7EB;
+    --red: #DC2626; --green: #16A34A;
+    --r: 10px; --ease: .2s ease;
+  }
+  body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: #1A1A1A; min-height: 100vh; }
+
+  /* ── Auth gate ── */
+  #auth-gate {
+    position: fixed; inset: 0; background: var(--primary);
+    display: flex; align-items: center; justify-content: center; z-index: 9999;
+  }
+  .auth-box {
+    background: var(--white); border-radius: 16px; padding: 2.5rem 2rem;
+    width: 100%; max-width: 360px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,.3);
+  }
+  .auth-logo { height: 70px; margin-bottom: 1.25rem; object-fit: contain; }
+  .auth-title { font-size: 1.1rem; font-weight: 700; color: var(--primary); margin-bottom: .25rem; }
+  .auth-sub { font-size: .8rem; color: var(--gray); margin-bottom: 1.75rem; }
+  .auth-input {
+    width: 100%; border: 2px solid var(--gray-l); border-radius: var(--r);
+    padding: .75rem 1rem; font-size: 1rem; margin-bottom: 1rem;
+    transition: border-color var(--ease);
+  }
+  .auth-input:focus { outline: none; border-color: var(--primary); }
+  .auth-btn {
+    width: 100%; background: var(--accent); color: #fff; border: none;
+    border-radius: var(--r); padding: .875rem; font-size: 1rem; font-weight: 700;
+    cursor: pointer; transition: background var(--ease);
+  }
+  .auth-btn:hover { background: #e06810; }
+  .auth-error { color: var(--red); font-size: .8125rem; margin-top: .5rem; display: none; }
+
+  /* ── Header ── */
+  .admin-header {
+    background: var(--primary); color: #fff; padding: .875rem 1.5rem;
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,.2);
+  }
+  .admin-header__brand { display: flex; align-items: center; gap: .75rem; }
+  .admin-header__logo { height: 36px; object-fit: contain; }
+  .admin-header__title { font-size: 1rem; font-weight: 700; }
+  .admin-header__sub { font-size: .7rem; color: rgba(255,255,255,.6); margin-top: 1px; }
+  .btn-preview {
+    background: var(--accent); color: #fff; border: none; border-radius: 8px;
+    padding: .5rem 1.1rem; font-size: .875rem; font-weight: 600; cursor: pointer;
+    text-decoration: none; transition: background var(--ease);
+  }
+  .btn-preview:hover { background: #e06810; }
+
+  /* ── Layout ── */
+  .admin-body { max-width: 960px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+
+  /* ── Tabs ── */
+  .tabs { display: flex; gap: .5rem; margin-bottom: 2rem; border-bottom: 2px solid var(--gray-l); padding-bottom: 0; }
+  .tab-btn {
+    background: none; border: none; cursor: pointer; padding: .625rem 1.25rem;
+    font-size: .9375rem; font-weight: 600; color: var(--gray); border-bottom: 3px solid transparent;
+    margin-bottom: -2px; transition: color var(--ease), border-color var(--ease);
+  }
+  .tab-btn.active { color: var(--primary); border-bottom-color: var(--accent); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ── Section card ── */
+  .section-card {
+    background: var(--white); border-radius: 14px; padding: 1.75rem;
+    box-shadow: 0 1px 4px rgba(0,0,0,.07); margin-bottom: 1.5rem;
+  }
+  .section-card__title {
+    font-size: 1rem; font-weight: 700; color: var(--primary); margin-bottom: 1.5rem;
+    padding-bottom: .75rem; border-bottom: 1px solid var(--gray-l);
+    display: flex; align-items: center; gap: .5rem;
+  }
+
+  /* ── Member card ── */
+  .member-grid { display: grid; grid-template-columns: 120px 1fr; gap: 1.25rem; align-items: start; }
+  .photo-zone { display: flex; flex-direction: column; align-items: center; gap: .625rem; }
+  .photo-preview {
+    width: 100px; height: 100px; border-radius: 50%; object-fit: cover;
+    border: 3px solid var(--accent); background: var(--gray-l);
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+  }
+  .photo-preview img { width: 100%; height: 100%; object-fit: cover; }
+  .photo-upload-btn {
+    font-size: .7rem; font-weight: 600; text-align: center; cursor: pointer;
+    color: var(--accent); text-decoration: underline;
+  }
+  .photo-upload-input { display: none; }
+  .fields-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+  @media(max-width: 600px) { .member-grid { grid-template-columns: 1fr; } .fields-grid { grid-template-columns: 1fr; } }
+
+  /* ── Form controls ── */
+  .field { display: flex; flex-direction: column; gap: .35rem; }
+  label { font-size: .75rem; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: .06em; }
+  input[type=text], input[type=url], input[type=tel], select, textarea {
+    border: 1.5px solid var(--gray-l); border-radius: 8px; padding: .625rem .875rem;
+    font-size: .9375rem; font-family: inherit; background: var(--bg); transition: border-color var(--ease);
+  }
+  input[type=text]:focus, input[type=url]:focus, input[type=tel]:focus, select:focus, textarea:focus {
+    outline: none; border-color: var(--primary); background: #fff;
+  }
+  .hint { font-size: .7rem; color: var(--gray); }
+
+  /* ── Video card ── */
+  .video-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.25rem; }
+  .video-preview-thumb {
+    background: #000; border-radius: 8px; overflow: hidden; aspect-ratio: 16/9;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .video-preview-thumb iframe { width: 100%; height: 100%; border: none; }
+  .yt-check { font-size: .7rem; color: var(--green); margin-top: .35rem; display: none; }
+  .yt-check.visible { display: block; }
+
+  /* ── Save bar ── */
+  .save-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--white); border-top: 1px solid var(--gray-l);
+    padding: 1rem 1.5rem; display: flex; align-items: center; justify-content: space-between;
+    gap: 1rem; box-shadow: 0 -4px 20px rgba(0,0,0,.08); z-index: 200;
+  }
+  .save-status { font-size: .875rem; color: var(--gray); }
+  .save-status.ok { color: var(--green); font-weight: 600; }
+  .save-status.err { color: var(--red); font-weight: 600; }
+  .save-actions { display: flex; gap: .75rem; }
+  .btn-save {
+    background: var(--primary); color: #fff; border: none; border-radius: 8px;
+    padding: .625rem 1.5rem; font-size: .9375rem; font-weight: 700; cursor: pointer;
+    transition: background var(--ease);
+  }
+  .btn-save:hover { background: #1D6B1D; }
+  .btn-reset {
+    background: none; color: var(--red); border: 1.5px solid var(--red); border-radius: 8px;
+    padding: .625rem 1.25rem; font-size: .875rem; font-weight: 600; cursor: pointer;
+    transition: background var(--ease), color var(--ease);
+  }
+  .btn-reset:hover { background: var(--red); color: #fff; }
+
+  /* ── Separator ── */
+  .separator { border: none; border-top: 1px solid var(--gray-l); margin: 1.5rem 0; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════ AUTH GATE ═══════════════════ -->
+<div id="auth-gate">
+  <div class="auth-box">
+    <img src="logo.jpg" alt="SGCI" class="auth-logo" onerror="this.style.display='none'" />
+    <p class="auth-title">Espace Administration</p>
+    <p class="auth-sub">Saisissez le mot de passe pour accéder au panneau</p>
+    <input type="password" id="pwd-input" class="auth-input" placeholder="Mot de passe" />
+    <button class="auth-btn" onclick="checkPassword()">Accéder</button>
+    <p class="auth-error" id="auth-error">Mot de passe incorrect.</p>
+  </div>
+</div>
+
+<!-- ═══════════════════ HEADER ═══════════════════ -->
+<header class="admin-header">
+  <div class="admin-header__brand">
+    <img src="logo.jpg" alt="SGCI" class="admin-header__logo" onerror="this.style.display='none'" />
+    <div>
+      <p class="admin-header__title">Administration SGCI</p>
+      <p class="admin-header__sub">Modifier les informations du site</p>
+    </div>
+  </div>
+  <button class="btn-preview" onclick="saveConfig(); location.href='index.html'">Voir le site →</button>
+</header>
+
+<!-- ═══════════════════ BODY ═══════════════════ -->
+<div class="admin-body">
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('equipe', this)">👥 Équipe</button>
+    <button class="tab-btn" onclick="switchTab('videos', this)">🎬 Vidéos</button>
+    <button class="tab-btn" onclick="switchTab('contact', this)">📞 Contact</button>
+  </div>
+
+  <!-- ══════ TAB : ÉQUIPE ══════ -->
+  <div id="tab-equipe" class="tab-panel active">
+
+    <!-- DG -->
+    <div class="section-card">
+      <p class="section-card__title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        Directeur Général
+      </p>
+      <div class="member-grid">
+        <div class="photo-zone">
+          <div class="photo-preview" id="prev-dg">
+            <img id="prev-dg-img" src="" alt="DG" onerror="this.style.display='none'" style="display:none" />
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.5" id="prev-dg-icon"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+          <label class="photo-upload-btn" for="upload-dg">Changer la photo</label>
+          <input type="file" id="upload-dg" class="photo-upload-input" accept="image/*" onchange="handlePhoto(this,'dg')" />
+        </div>
+        <div class="fields-grid">
+          <div class="field">
+            <label>Nom complet</label>
+            <input type="text" id="f-dg-name" placeholder="Fousseni TRAORÉ" />
+          </div>
+          <div class="field">
+            <label>Titre / Poste</label>
+            <input type="text" id="f-dg-role" placeholder="Directeur Général" />
+          </div>
+          <div class="field" style="grid-column:1/-1">
+            <label>Badge (étiquette)</label>
+            <input type="text" id="f-dg-badge" placeholder="Direction Générale" />
+          </div>
+          <div class="field" style="grid-column:1/-1">
+            <label>Mot du Directeur Général</label>
+            <textarea id="f-motdg-text" rows="5" style="border:1.5px solid var(--gray-l);border-radius:8px;padding:.625rem .875rem;font-size:.9375rem;font-family:inherit;background:var(--bg);resize:vertical;width:100%" placeholder="Saisissez ici le message du DG qui apparaîtra sur le site…"></textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Managers -->
+    <div class="section-card">
+      <p class="section-card__title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        Équipe de Direction (3 membres)
+      </p>
+
+      <!-- M1 -->
+      <p style="font-size:.8rem;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.75rem">Membre 1</p>
+      <div class="member-grid">
+        <div class="photo-zone">
+          <div class="photo-preview">
+            <img id="prev-m1-img" src="" alt="M1" onerror="this.style.display='none'" style="display:none" />
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.5" id="prev-m1-icon"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+          <label class="photo-upload-btn" for="upload-m1">Changer la photo</label>
+          <input type="file" id="upload-m1" class="photo-upload-input" accept="image/*" onchange="handlePhoto(this,'m1')" />
+        </div>
+        <div class="fields-grid">
+          <div class="field"><label>Nom complet</label><input type="text" id="f-m1-name" placeholder="Nom Prénom" /></div>
+          <div class="field"><label>Poste</label><input type="text" id="f-m1-role" placeholder="Directeur..." /></div>
+          <div class="field" style="grid-column:1/-1"><label>Badge</label><input type="text" id="f-m1-badge" placeholder="Direction..." /></div>
+        </div>
+      </div>
+      <hr class="separator" />
+
+      <!-- M2 -->
+      <p style="font-size:.8rem;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.75rem">Membre 2</p>
+      <div class="member-grid">
+        <div class="photo-zone">
+          <div class="photo-preview">
+            <img id="prev-m2-img" src="" alt="M2" onerror="this.style.display='none'" style="display:none" />
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.5" id="prev-m2-icon"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+          <label class="photo-upload-btn" for="upload-m2">Changer la photo</label>
+          <input type="file" id="upload-m2" class="photo-upload-input" accept="image/*" onchange="handlePhoto(this,'m2')" />
+        </div>
+        <div class="fields-grid">
+          <div class="field"><label>Nom complet</label><input type="text" id="f-m2-name" placeholder="Nom Prénom" /></div>
+          <div class="field"><label>Poste</label><input type="text" id="f-m2-role" placeholder="Directeur..." /></div>
+          <div class="field" style="grid-column:1/-1"><label>Badge</label><input type="text" id="f-m2-badge" placeholder="Direction..." /></div>
+        </div>
+      </div>
+      <hr class="separator" />
+
+      <!-- M3 -->
+      <p style="font-size:.8rem;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.75rem">Membre 3</p>
+      <div class="member-grid">
+        <div class="photo-zone">
+          <div class="photo-preview">
+            <img id="prev-m3-img" src="" alt="M3" onerror="this.style.display='none'" style="display:none" />
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.5" id="prev-m3-icon"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+          <label class="photo-upload-btn" for="upload-m3">Changer la photo</label>
+          <input type="file" id="upload-m3" class="photo-upload-input" accept="image/*" onchange="handlePhoto(this,'m3')" />
+        </div>
+        <div class="fields-grid">
+          <div class="field"><label>Nom complet</label><input type="text" id="f-m3-name" placeholder="Nom Prénom" /></div>
+          <div class="field"><label>Poste</label><input type="text" id="f-m3-role" placeholder="Directeur..." /></div>
+          <div class="field" style="grid-column:1/-1"><label>Badge</label><input type="text" id="f-m3-badge" placeholder="Direction..." /></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Secrétaire -->
+    <div class="section-card">
+      <p class="section-card__title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        Secrétaire — La Vitrine SGCI
+      </p>
+      <div class="member-grid">
+        <div class="photo-zone">
+          <div class="photo-preview">
+            <img id="prev-sec-img" src="" alt="Sec" onerror="this.style.display='none'" style="display:none" />
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.5" id="prev-sec-icon"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+          <label class="photo-upload-btn" for="upload-sec">Changer la photo</label>
+          <input type="file" id="upload-sec" class="photo-upload-input" accept="image/*" onchange="handlePhoto(this,'sec')" />
+        </div>
+        <div class="fields-grid">
+          <div class="field"><label>Nom complet</label><input type="text" id="f-sec-name" placeholder="Prénom NOM" /></div>
+          <div class="field"><label>Poste</label><input type="text" id="f-sec-role" placeholder="Secrétaire de Direction" /></div>
+          <div class="field" style="grid-column:1/-1"><label>Badge</label><input type="text" id="f-sec-badge" placeholder="Secrétariat" /></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /tab-equipe -->
+
+  <!-- ══════ TAB : VIDÉOS ══════ -->
+  <div id="tab-videos" class="tab-panel">
+
+    <div class="section-card">
+      <p class="section-card__title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+        3 Vidéos YouTube
+      </p>
+      <p class="hint" style="margin-bottom:1.5rem">Collez l'URL complète de la vidéo YouTube (ex: https://www.youtube.com/watch?v=dQw4w9WgXcQ) ou directement l'identifiant.</p>
+
+      <!-- V1 -->
+      <p style="font-size:.8rem;font-weight:700;color:var(--primary);margin-bottom:.75rem">Vidéo 1 — Présentation de SGCI</p>
+      <div class="video-row">
+        <div class="field">
+          <label>URL ou ID YouTube</label>
+          <input type="text" id="f-video1" placeholder="https://www.youtube.com/watch?v=..." oninput="previewVideo(this,'video-prev1','check1')" />
+          <p class="yt-check" id="check1">✓ ID détecté</p>
+          <input type="text" id="f-video1-title" placeholder="Titre de la vidéo" style="margin-top:.5rem" />
+        </div>
+        <div class="video-preview-thumb" id="video-prev1">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="1.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </div>
+      </div>
+      <hr class="separator" />
+
+      <!-- V2 -->
+      <p style="font-size:.8rem;font-weight:700;color:var(--primary);margin-bottom:.75rem">Vidéo 2 — Visite de chantier</p>
+      <div class="video-row">
+        <div class="field">
+          <label>URL ou ID YouTube</label>
+          <input type="text" id="f-video2" placeholder="https://www.youtube.com/watch?v=..." oninput="previewVideo(this,'video-prev2','check2')" />
+          <p class="yt-check" id="check2">✓ ID détecté</p>
+          <input type="text" id="f-video2-title" placeholder="Titre de la vidéo" style="margin-top:.5rem" />
+        </div>
+        <div class="video-preview-thumb" id="video-prev2">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="1.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </div>
+      </div>
+      <hr class="separator" />
+
+      <!-- V3 -->
+      <p style="font-size:.8rem;font-weight:700;color:var(--primary);margin-bottom:.75rem">Vidéo 3 — Témoignages clients</p>
+      <div class="video-row">
+        <div class="field">
+          <label>URL ou ID YouTube</label>
+          <input type="text" id="f-video3" placeholder="https://www.youtube.com/watch?v=..." oninput="previewVideo(this,'video-prev3','check3')" />
+          <p class="yt-check" id="check3">✓ ID détecté</p>
+          <input type="text" id="f-video3-title" placeholder="Titre de la vidéo" style="margin-top:.5rem" />
+        </div>
+        <div class="video-preview-thumb" id="video-prev3">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="1.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </div>
+      </div>
+
+    </div>
+  </div><!-- /tab-videos -->
+
+  <!-- ══════ TAB : CONTACT ══════ -->
+  <div id="tab-contact" class="tab-panel">
+
+    <div class="section-card">
+      <p class="section-card__title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 014.69 12 19.79 19.79 0 011.61 3.18a2 2 0 011.99-2.18h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L7.91 9.91a16 16 0 006.08 6.08l1.93-1.93a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+        Téléphones
+      </p>
+      <div class="fields-grid">
+        <div class="field"><label>Numéro 1</label><input type="tel" id="f-phone1" placeholder="+225 07 00 00 00 00" /></div>
+        <div class="field"><label>Numéro 2 (optionnel)</label><input type="tel" id="f-phone2" placeholder="+225 05 00 00 00 00" /></div>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <p class="section-card__title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+        Emails
+      </p>
+      <div class="fields-grid">
+        <div class="field"><label>Email principal</label><input type="text" id="f-email1" placeholder="contact@sgci-ci.com" /></div>
+        <div class="field"><label>Email secondaire (optionnel)</label><input type="text" id="f-email2" placeholder="info@sgci-ci.com" /></div>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <p class="section-card__title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+        WhatsApp (formulaire de contact)
+      </p>
+      <div class="field" style="max-width:340px">
+        <label>Numéro WhatsApp</label>
+        <input type="tel" id="f-whatsapp" placeholder="2250700000000" />
+        <p class="hint">Format international sans + ni espaces. Ex : +225 07 08 56 53 91 → 2250708565391</p>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <p class="section-card__title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        Mot de passe administrateur
+      </p>
+      <div class="field" style="max-width:340px">
+        <label>Nouveau mot de passe</label>
+        <input type="text" id="f-newpwd" placeholder="Laisser vide pour ne pas changer" />
+        <p class="hint">Mot de passe actuel par défaut : <strong>sgci2024</strong></p>
+      </div>
+    </div>
+
+  </div><!-- /tab-contact -->
+
+</div><!-- /admin-body -->
+
+<!-- Save bar -->
+<div class="save-bar">
+  <p class="save-status" id="save-status">Modifications non enregistrées</p>
+  <div class="save-actions">
+    <button class="btn-reset" onclick="resetConfig()">Réinitialiser</button>
+    <button class="btn-save" onclick="saveConfig()">Enregistrer les modifications</button>
+  </div>
+</div>
+
+<script>
+/* ─── Auth ─── */
+const ADMIN_PWD_KEY = 'sgci_admin_pwd';
+const DEFAULT_PWD   = 'sgci2024';
+
+function getPassword() { return localStorage.getItem(ADMIN_PWD_KEY) || DEFAULT_PWD; }
+
+function checkPassword() {
+  const val = document.getElementById('pwd-input').value;
+  if (val === getPassword()) {
+    document.getElementById('auth-gate').style.display = 'none';
+    loadForm();
+  } else {
+    document.getElementById('auth-error').style.display = 'block';
+  }
+}
+document.getElementById('pwd-input').addEventListener('keydown', e => { if (e.key === 'Enter') checkPassword(); });
+
+/* ─── Tabs ─── */
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  btn.classList.add('active');
+}
+
+/* ─── Photo upload ─── */
+const photoData = {};
+function handlePhoto(input, key) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    photoData[key] = e.target.result;
+    const img = document.getElementById('prev-' + key + '-img');
+    const icon = document.getElementById('prev-' + key + '-icon');
+    if (img) { img.src = e.target.result; img.style.display = 'block'; }
+    if (icon) icon.style.display = 'none';
+    markUnsaved();
+  };
+  reader.readAsDataURL(file);
+}
+
+/* ─── YouTube ─── */
+function extractYTid(raw) {
+  raw = raw.trim();
+  const m = raw.match(/(?:v=|youtu\.be\/|embed\/)([A-Za-z0-9_-]{11})/);
+  if (m) return m[1];
+  if (/^[A-Za-z0-9_-]{11}$/.test(raw)) return raw;
+  return null;
+}
+function previewVideo(input, previewId, checkId) {
+  const id = extractYTid(input.value);
+  const box = document.getElementById(previewId);
+  const chk = document.getElementById(checkId);
+  if (id) {
+    box.innerHTML = `<iframe src="https://www.youtube.com/embed/${id}" frameborder="0" allowfullscreen loading="lazy" style="width:100%;height:100%"></iframe>`;
+    chk.classList.add('visible');
+  } else {
+    box.innerHTML = `<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="1.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+    chk.classList.remove('visible');
+  }
+  markUnsaved();
+}
+
+/* ─── Auto-save ─── */
+let _autoSaveTimer = null;
+
+function scheduleAutoSave() {
+  const s = document.getElementById('save-status');
+  s.textContent = 'Enregistrement…';
+  s.className = 'save-status';
+  clearTimeout(_autoSaveTimer);
+  _autoSaveTimer = setTimeout(() => { saveConfig(true); }, 800);
+}
+
+// kept for compatibility with existing calls inside handlePhoto / previewVideo
+function markUnsaved() { scheduleAutoSave(); }
+
+function v(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
+
+function saveConfig(silent = false) {
+  clearTimeout(_autoSaveTimer);
+  const cfg = JSON.parse(localStorage.getItem('sgci_config') || '{}');
+  // Équipe — toujours sauvegarder (même vide, pour permettre l'effacement)
+  const fields = ['dg','m1','m2','m3','sec'];
+  fields.forEach(k => {
+    cfg[k+'_name']  = v('f-'+k+'-name');
+    cfg[k+'_role']  = v('f-'+k+'-role');
+    cfg[k+'_badge'] = v('f-'+k+'-badge');
+    if (photoData[k]) cfg[k+'_photo'] = photoData[k];
+    if (k === 'dg') {
+      const motdg = document.getElementById('f-motdg-text');
+      cfg.motdg_text = motdg && motdg.value.trim() ? '"' + motdg.value.trim() + '"' : '';
+    }
+  });
+  // Vidéos
+  [1,2,3].forEach(n => {
+    cfg['video'+n+'_id']    = extractYTid(v('f-video'+n)) || '';
+    cfg['video'+n+'_title'] = v('f-video'+n+'-title');
+  });
+  // Contact
+  const ph1 = v('f-phone1'), ph2 = v('f-phone2');
+  cfg.contact_phones = ph1 ? (ph2 ? ph1 + '<br>' + ph2 : ph1) : '';
+  const em1 = v('f-email1'), em2 = v('f-email2');
+  cfg.contact_emails = em1 ? (em2 ? em1 + '<br>' + em2 : em1) : '';
+  cfg.contact_whatsapp = v('f-whatsapp');
+  // Mot de passe
+  if (v('f-newpwd')) { localStorage.setItem(ADMIN_PWD_KEY, v('f-newpwd')); document.getElementById('f-newpwd').value = ''; }
+
+  localStorage.setItem('sgci_config', JSON.stringify(cfg));
+  const s = document.getElementById('save-status');
+  s.textContent = silent ? '✓ Sauvegardé automatiquement' : '✓ Enregistré avec succès !';
+  s.className = 'save-status ok';
+  setTimeout(() => { s.textContent = ''; s.className = 'save-status'; }, silent ? 2000 : 3000);
+}
+
+function resetConfig() {
+  if (!confirm('Réinitialiser toutes les informations ? Les données enregistrées seront effacées.')) return;
+  localStorage.removeItem('sgci_config');
+  document.querySelectorAll('input[type=text],input[type=tel],input[type=url]').forEach(el => el.value = '');
+  Object.keys(photoData).forEach(k => delete photoData[k]);
+  ['dg','m1','m2','m3','sec'].forEach(k => {
+    const img = document.getElementById('prev-'+k+'-img');
+    const icon = document.getElementById('prev-'+k+'-icon');
+    if (img)  { img.src = ''; img.style.display = 'none'; }
+    if (icon) icon.style.display = '';
+  });
+  [1,2,3].forEach(n => {
+    const box = document.getElementById('video-prev'+n);
+    if (box) box.innerHTML = `<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="1.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+    const chk = document.getElementById('check'+n);
+    if (chk) chk.classList.remove('visible');
+  });
+  const s = document.getElementById('save-status');
+  s.textContent = '✓ Réinitialisé.'; s.className = 'save-status ok';
+  setTimeout(() => { s.textContent = 'Modifications non enregistrées'; s.className = 'save-status'; }, 3000);
+}
+
+function loadForm() {
+  const cfg = JSON.parse(localStorage.getItem('sgci_config') || '{}');
+  const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+  // Équipe
+  ['dg','m1','m2','m3','sec'].forEach(k => {
+    set('f-'+k+'-name',  cfg[k+'_name']);
+    set('f-'+k+'-role',  cfg[k+'_role']);
+    set('f-'+k+'-badge', cfg[k+'_badge']);
+    if (k === 'dg' && cfg.motdg_text) { const el = document.getElementById('f-motdg-text'); if (el) el.value = cfg.motdg_text.replace(/^"|"$/g,''); }
+    if (cfg[k+'_photo']) {
+      photoData[k] = cfg[k+'_photo'];
+      const img  = document.getElementById('prev-'+k+'-img');
+      const icon = document.getElementById('prev-'+k+'-icon');
+      if (img)  { img.src = cfg[k+'_photo']; img.style.display = 'block'; }
+      if (icon) icon.style.display = 'none';
+    }
+  });
+  // Vidéos
+  [1,2,3].forEach(n => {
+    const vid = cfg['video'+n+'_id'];
+    if (vid !== undefined) {
+      const el = document.getElementById('f-video'+n);
+      if (el) { el.value = vid; previewVideo(el, 'video-prev'+n, 'check'+n); }
+    }
+    set('f-video'+n+'-title', cfg['video'+n+'_title']);
+  });
+  // Contact
+  if (cfg.contact_phones) {
+    const parts = cfg.contact_phones.split('<br>');
+    set('f-phone1', parts[0]); set('f-phone2', parts[1]);
+  }
+  if (cfg.contact_emails) {
+    const parts = cfg.contact_emails.split('<br>');
+    set('f-email1', parts[0]); set('f-email2', parts[1]);
+  }
+  set('f-whatsapp', cfg.contact_whatsapp);
+}
+
+// Auto-save sur tous les champs texte et textarea
+document.querySelectorAll('input, textarea').forEach(el => {
+  if (el.id !== 'pwd-input' && el.type !== 'file') {
+    el.addEventListener('input', scheduleAutoSave);
+  }
+});
+</script>
+</body>
+</html>
