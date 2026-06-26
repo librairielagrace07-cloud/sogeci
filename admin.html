@@ -574,11 +574,12 @@ function handlePhoto(input, key) {
   const file = input.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = e => {
-    photoData[key] = e.target.result;
+  reader.onload = async e => {
+    const compressed = await pfCompress(e.target.result, 400, 400, 0.80);
+    photoData[key] = compressed;
     const img = document.getElementById('prev-' + key + '-img');
     const icon = document.getElementById('prev-' + key + '-icon');
-    if (img) { img.src = e.target.result; img.style.display = 'block'; }
+    if (img) { img.src = compressed; img.style.display = 'block'; }
     if (icon) icon.style.display = 'none';
     markUnsaved();
   };
@@ -745,17 +746,44 @@ function pfGetAlbums() {
 function pfSetAlbums(albums) {
   const cfg = JSON.parse(localStorage.getItem('sgci_config') || '{}');
   cfg.portfolio_albums = albums;
-  localStorage.setItem('sgci_config', JSON.stringify(cfg));
+  try {
+    localStorage.setItem('sgci_config', JSON.stringify(cfg));
+  } catch (e) {
+    const msg = 'Espace de stockage plein. Supprimez des albums existants ou utilisez des photos plus légères (< 1 Mo).';
+    const s = document.getElementById('save-status');
+    s.textContent = '⚠ ' + msg; s.className = 'save-status err';
+    setTimeout(() => { s.textContent = ''; s.className = 'save-status'; }, 6000);
+    throw e;
+  }
+}
+
+/* Compression canvas : réduit les images lourdes avant stockage */
+function pfCompress(dataUrl, maxW, maxH, quality) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const ratio = Math.min(maxW / img.width, maxH / img.height, 1);
+      const w = Math.round(img.width * ratio);
+      const h = Math.round(img.height * ratio);
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(c.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
 }
 
 function pfHandleCover(input) {
   const file = input.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = e => {
-    _pfCoverData = e.target.result;
+  reader.onload = async e => {
+    const compressed = await pfCompress(e.target.result, 800, 600, 0.72);
+    _pfCoverData = compressed;
     const img = document.getElementById('pf-cover-img');
-    img.src = _pfCoverData; img.style.display = 'block';
+    img.src = compressed; img.style.display = 'block';
   };
   reader.readAsDataURL(file);
 }
@@ -764,8 +792,9 @@ function pfHandlePhotos(input) {
   const files = Array.from(input.files);
   files.forEach(file => {
     const reader = new FileReader();
-    reader.onload = e => {
-      _pfPhotosData.push({ src: e.target.result, caption: '' });
+    reader.onload = async e => {
+      const compressed = await pfCompress(e.target.result, 1200, 900, 0.78);
+      _pfPhotosData.push({ src: compressed, caption: '' });
       pfRenderPhotoStrip();
     };
     reader.readAsDataURL(file);
@@ -806,7 +835,11 @@ function pfSaveAlbum() {
   } else {
     albums.push(album);
   }
-  pfSetAlbums(albums);
+  try {
+    pfSetAlbums(albums);
+  } catch (e) {
+    return;
+  }
   pfCancelEdit();
   pfRenderAlbumList();
   markUnsaved();
