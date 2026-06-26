@@ -147,6 +147,46 @@
 
   /* ── Separator ── */
   .separator { border: none; border-top: 1px solid var(--gray-l); margin: 1.5rem 0; }
+
+  /* ── Portfolio admin ── */
+  .pf-album-list-item {
+    display: grid; grid-template-columns: 72px 1fr auto; gap: 1rem; align-items: center;
+    padding: .875rem 0; border-bottom: 1px solid var(--gray-l);
+  }
+  .pf-album-list-item:last-child { border-bottom: none; }
+  .pf-cover-thumb { width: 72px; height: 52px; border-radius: 6px; object-fit: cover; background: var(--gray-l); display: block; }
+  .pf-album-info { min-width: 0; }
+  .pf-album-name { font-size: .9375rem; font-weight: 700; color: var(--primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pf-album-meta { font-size: .75rem; color: var(--gray); margin-top: 2px; }
+  .pf-album-actions { display: flex; gap: .5rem; flex-shrink: 0; }
+  .btn-edit-sm {
+    background: var(--primary); color: #fff; border: none; border-radius: 6px;
+    padding: .35rem .75rem; font-size: .75rem; font-weight: 600; cursor: pointer; transition: background var(--ease);
+  }
+  .btn-edit-sm:hover { background: #1D6B1D; }
+  .btn-del-sm {
+    background: none; color: var(--red); border: 1.5px solid var(--red); border-radius: 6px;
+    padding: .35rem .75rem; font-size: .75rem; font-weight: 600; cursor: pointer; transition: background var(--ease), color var(--ease);
+  }
+  .btn-del-sm:hover { background: var(--red); color: #fff; }
+  .pf-photos-strip { display: flex; gap: .4rem; flex-wrap: wrap; padding: .625rem; background: var(--bg); border: 1.5px dashed var(--gray-l); border-radius: 8px; min-height: 56px; }
+  .pf-photo-thumb-wrap { position: relative; width: 60px; height: 60px; }
+  .pf-photo-thumb { width: 60px; height: 60px; border-radius: 6px; object-fit: cover; display: block; }
+  .pf-photo-del {
+    position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--red); color: #fff; border: none; cursor: pointer;
+    font-size: .6875rem; line-height: 1; display: flex; align-items: center; justify-content: center;
+  }
+  .pf-cover-preview-wrap { width: 100px; height: 70px; border-radius: 8px; background: var(--gray-l); overflow: hidden; flex-shrink: 0; }
+  .pf-cover-preview-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .badge-cat {
+    display: inline-block; padding: .15rem .55rem; border-radius: 999px; font-size: .7rem; font-weight: 700;
+    background: rgba(12,74,12,.1); color: var(--primary);
+  }
+  @media(max-width: 600px) {
+    .pf-album-list-item { grid-template-columns: 60px 1fr; }
+    .pf-album-actions { grid-column: 1/-1; }
+  }
 </style>
 </head>
 <body>
@@ -183,6 +223,7 @@
     <button class="tab-btn active" onclick="switchTab('equipe', this)">👥 Équipe</button>
     <button class="tab-btn" onclick="switchTab('videos', this)">🎬 Vidéos</button>
     <button class="tab-btn" onclick="switchTab('contact', this)">📞 Contact</button>
+    <button class="tab-btn" onclick="switchTab('portfolio', this)">🖼️ Portfolio</button>
   </div>
 
   <!-- ══════ TAB : ÉQUIPE ══════ -->
@@ -421,6 +462,75 @@
 
   </div><!-- /tab-contact -->
 
+  <!-- ══════ TAB : PORTFOLIO ══════ -->
+  <div id="tab-portfolio" class="tab-panel">
+
+    <!-- Formulaire créer / modifier album -->
+    <div class="section-card">
+      <p class="section-card__title" id="pf-form-heading">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        <span>Créer un album</span>
+      </p>
+
+      <div class="fields-grid" style="margin-bottom:1rem">
+        <div class="field">
+          <label>Titre de l'album</label>
+          <input type="text" id="pf-title" placeholder="Ex: Résidence Les Palmiers" />
+        </div>
+        <div class="field">
+          <label>Sous-titre (optionnel)</label>
+          <input type="text" id="pf-subtitle" placeholder="Ex: Immeuble R+4, Cocody" />
+        </div>
+        <div class="field" style="grid-column:1/-1">
+          <label>Catégorie</label>
+          <select id="pf-category">
+            <option value="realises">Réalisés</option>
+            <option value="en-cours">En Cours</option>
+            <option value="visite">Visite Chantier / Site</option>
+            <option value="voyage">Voyage d'Affaires</option>
+          </select>
+        </div>
+      </div>
+
+      <p style="font-size:.75rem;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem">Photo de couverture</p>
+      <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.25rem">
+        <div class="pf-cover-preview-wrap" id="pf-cover-wrap">
+          <img id="pf-cover-img" src="" alt="" style="display:none" />
+        </div>
+        <div>
+          <label style="background:var(--accent);color:#fff;padding:.5rem 1rem;border-radius:8px;font-size:.8125rem;text-decoration:none;font-weight:600;cursor:pointer;display:inline-block;text-transform:none;letter-spacing:0" for="pf-cover-upload">Choisir une photo</label>
+          <input type="file" id="pf-cover-upload" accept="image/*" style="display:none" onchange="pfHandleCover(this)" />
+          <p class="hint" style="margin-top:.3rem">Photo principale affichée sur la carte de l'album</p>
+        </div>
+      </div>
+
+      <p style="font-size:.75rem;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem">Photos de la galerie</p>
+      <div class="pf-photos-strip" id="pf-photos-strip"></div>
+      <div style="margin-top:.625rem">
+        <label style="background:var(--bg);color:var(--primary);border:1.5px solid var(--primary);padding:.45rem .9rem;border-radius:8px;font-size:.8125rem;font-weight:600;cursor:pointer;display:inline-block;text-transform:none;letter-spacing:0" for="pf-photos-upload">+ Ajouter des photos</label>
+        <input type="file" id="pf-photos-upload" accept="image/*" multiple style="display:none" onchange="pfHandlePhotos(this)" />
+        <span class="hint" style="margin-left:.5rem">Sélection multiple possible</span>
+      </div>
+
+      <div style="display:flex;gap:.75rem;margin-top:1.5rem;align-items:center;flex-wrap:wrap">
+        <button class="btn-save" onclick="pfSaveAlbum()" id="pf-save-btn" style="padding:.55rem 1.25rem;font-size:.875rem">Créer l'album</button>
+        <button onclick="pfCancelEdit()" id="pf-cancel-btn" style="display:none;background:none;border:1.5px solid var(--gray);color:var(--gray);border-radius:8px;padding:.5rem 1rem;font-size:.875rem;cursor:pointer;font-weight:600">Annuler</button>
+      </div>
+    </div>
+
+    <!-- Liste des albums -->
+    <div class="section-card">
+      <p class="section-card__title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Albums (<span id="pf-album-count">0</span>)
+      </p>
+      <div id="pf-album-list">
+        <p style="color:var(--gray);font-size:.875rem;text-align:center;padding:2rem 0">Aucun album. Créez votre premier album ci-dessus.</p>
+      </div>
+    </div>
+
+  </div><!-- /tab-portfolio -->
+
 </div><!-- /admin-body -->
 
 <!-- Save bar -->
@@ -542,6 +652,7 @@ function saveConfig(silent = false) {
   // Mot de passe
   if (v('f-newpwd')) { localStorage.setItem(ADMIN_PWD_KEY, v('f-newpwd')); document.getElementById('f-newpwd').value = ''; }
 
+  // Portfolio albums managed separately — preserve existing value
   localStorage.setItem('sgci_config', JSON.stringify(cfg));
   const s = document.getElementById('save-status');
   s.textContent = silent ? '✓ Sauvegardé automatiquement' : '✓ Enregistré avec succès !';
@@ -566,6 +677,8 @@ function resetConfig() {
     const chk = document.getElementById('check'+n);
     if (chk) chk.classList.remove('visible');
   });
+  pfCancelEdit();
+  pfRenderAlbumList();
   const s = document.getElementById('save-status');
   s.textContent = '✓ Réinitialisé.'; s.className = 'save-status ok';
   setTimeout(() => { s.textContent = 'Modifications non enregistrées'; s.className = 'save-status'; }, 3000);
@@ -607,6 +720,8 @@ function loadForm() {
     set('f-email1', parts[0]); set('f-email2', parts[1]);
   }
   set('f-whatsapp', cfg.contact_whatsapp);
+  // Portfolio
+  pfRenderAlbumList();
 }
 
 // Auto-save sur tous les champs texte et textarea
@@ -615,6 +730,163 @@ document.querySelectorAll('input, textarea').forEach(el => {
     el.addEventListener('input', scheduleAutoSave);
   }
 });
+
+/* ─── Portfolio Admin ─── */
+const PF_CAT_LABELS = { realises:'Réalisés', 'en-cours':'En Cours', visite:'Visite Chantier/Site', voyage:"Voyage d'Affaires" };
+let _pfEditId   = null;
+let _pfCoverData = null;
+let _pfPhotosData = [];
+
+function pfGetAlbums() {
+  const cfg = JSON.parse(localStorage.getItem('sgci_config') || '{}');
+  return cfg.portfolio_albums || [];
+}
+
+function pfSetAlbums(albums) {
+  const cfg = JSON.parse(localStorage.getItem('sgci_config') || '{}');
+  cfg.portfolio_albums = albums;
+  localStorage.setItem('sgci_config', JSON.stringify(cfg));
+}
+
+function pfHandleCover(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    _pfCoverData = e.target.result;
+    const img = document.getElementById('pf-cover-img');
+    img.src = _pfCoverData; img.style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+}
+
+function pfHandlePhotos(input) {
+  const files = Array.from(input.files);
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      _pfPhotosData.push({ src: e.target.result, caption: '' });
+      pfRenderPhotoStrip();
+    };
+    reader.readAsDataURL(file);
+  });
+  input.value = '';
+}
+
+function pfRenderPhotoStrip() {
+  const strip = document.getElementById('pf-photos-strip');
+  strip.innerHTML = _pfPhotosData.map((p, i) => `
+    <div class="pf-photo-thumb-wrap">
+      <img class="pf-photo-thumb" src="${p.src}" alt="" />
+      <button class="pf-photo-del" onclick="pfRemovePhoto(${i})" title="Supprimer">&times;</button>
+    </div>
+  `).join('') || '<span style="color:var(--gray);font-size:.8rem;padding:.25rem">Aucune photo ajoutée</span>';
+}
+
+function pfRemovePhoto(idx) {
+  _pfPhotosData.splice(idx, 1);
+  pfRenderPhotoStrip();
+}
+
+function pfSaveAlbum() {
+  const title = document.getElementById('pf-title').value.trim();
+  if (!title) { document.getElementById('pf-title').focus(); return; }
+  const albums = pfGetAlbums();
+  const album = {
+    id:       _pfEditId || ('alb-' + Date.now()),
+    title:    title,
+    subtitle: document.getElementById('pf-subtitle').value.trim(),
+    category: document.getElementById('pf-category').value,
+    cover:    _pfCoverData || (_pfEditId ? (albums.find(a => a.id === _pfEditId) || {}).cover || '' : ''),
+    photos:   _pfPhotosData.length ? _pfPhotosData : (_pfEditId ? (albums.find(a => a.id === _pfEditId) || {}).photos || [] : [])
+  };
+  if (_pfEditId) {
+    const idx = albums.findIndex(a => a.id === _pfEditId);
+    if (idx !== -1) albums[idx] = album; else albums.push(album);
+  } else {
+    albums.push(album);
+  }
+  pfSetAlbums(albums);
+  pfCancelEdit();
+  pfRenderAlbumList();
+  markUnsaved();
+  const s = document.getElementById('save-status');
+  s.textContent = '✓ Album enregistré'; s.className = 'save-status ok';
+  setTimeout(() => { s.textContent = ''; s.className = 'save-status'; }, 2000);
+}
+
+function pfDeleteAlbum(id) {
+  if (!confirm('Supprimer cet album et toutes ses photos ?')) return;
+  pfSetAlbums(pfGetAlbums().filter(a => a.id !== id));
+  pfRenderAlbumList();
+  markUnsaved();
+}
+
+function pfEditAlbum(id) {
+  const album = pfGetAlbums().find(a => a.id === id);
+  if (!album) return;
+  _pfEditId = id;
+  _pfCoverData = null;
+  _pfPhotosData = album.photos ? album.photos.map(p => ({ ...p })) : [];
+  document.getElementById('pf-title').value    = album.title    || '';
+  document.getElementById('pf-subtitle').value = album.subtitle || '';
+  document.getElementById('pf-category').value = album.category || 'realises';
+  const img = document.getElementById('pf-cover-img');
+  if (album.cover) { img.src = album.cover; img.style.display = 'block'; }
+  pfRenderPhotoStrip();
+  document.querySelector('#pf-form-heading span').textContent = ' Modifier l\'album';
+  document.getElementById('pf-save-btn').textContent = 'Enregistrer les modifications';
+  document.getElementById('pf-cancel-btn').style.display = '';
+  document.querySelector('#tab-portfolio .section-card').scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+function pfCancelEdit() {
+  _pfEditId = null; _pfCoverData = null; _pfPhotosData = [];
+  document.getElementById('pf-title').value    = '';
+  document.getElementById('pf-subtitle').value = '';
+  document.getElementById('pf-category').value = 'realises';
+  const img = document.getElementById('pf-cover-img');
+  img.src = ''; img.style.display = 'none';
+  document.getElementById('pf-cover-upload').value = '';
+  pfRenderPhotoStrip();
+  document.querySelector('#pf-form-heading span').textContent = ' Créer un album';
+  document.getElementById('pf-save-btn').textContent = 'Créer l\'album';
+  document.getElementById('pf-cancel-btn').style.display = 'none';
+}
+
+function pfRenderAlbumList() {
+  const albums = pfGetAlbums();
+  const list   = document.getElementById('pf-album-list');
+  const count  = document.getElementById('pf-album-count');
+  count.textContent = albums.length;
+  if (!albums.length) {
+    list.innerHTML = '<p style="color:var(--gray);font-size:.875rem;text-align:center;padding:2rem 0">Aucun album. Créez votre premier album ci-dessus.</p>';
+    return;
+  }
+  list.innerHTML = albums.map(a => {
+    const photoCount = a.photos ? a.photos.length : 0;
+    const coverSrc   = a.cover || '';
+    return `
+    <div class="pf-album-list-item">
+      ${coverSrc
+        ? `<img class="pf-cover-thumb" src="${coverSrc}" alt="${a.title}" />`
+        : `<div class="pf-cover-thumb" style="border-radius:6px;background:var(--gray-l)"></div>`
+      }
+      <div class="pf-album-info">
+        <p class="pf-album-name">${a.title}</p>
+        <p class="pf-album-meta">
+          <span class="badge-cat">${PF_CAT_LABELS[a.category] || a.category}</span>
+          &nbsp;${photoCount} photo${photoCount !== 1 ? 's' : ''}
+          ${a.subtitle ? ' — ' + a.subtitle : ''}
+        </p>
+      </div>
+      <div class="pf-album-actions">
+        <button class="btn-edit-sm" onclick="pfEditAlbum('${a.id}')">Modifier</button>
+        <button class="btn-del-sm"  onclick="pfDeleteAlbum('${a.id}')">Supprimer</button>
+      </div>
+    </div>`;
+  }).join('');
+}
 </script>
 </body>
 </html>

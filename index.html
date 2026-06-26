@@ -287,32 +287,81 @@
       .motdg__photo-wrap { flex-direction:column; }
     }
 
-    /* ===================== [5] PORTFOLIO ===================== */
+    /* ===================== [5] PORTFOLIO — ALBUMS ===================== */
     .portfolio { padding:6rem 0; background:var(--bg); }
-    .portfolio__filters { display:flex; gap:.75rem; justify-content:center; flex-wrap:wrap; margin-bottom:3rem; }
-    .filter-btn {
-      padding:.5625rem 1.375rem; border-radius:50px; font-size:.875rem; font-weight:500;
-      background:var(--white); color:var(--gray); border:1.5px solid var(--gray-l); transition:all var(--ease);
-    }
-    .filter-btn:hover, .filter-btn.active { background:var(--primary); color:var(--white); border-color:var(--primary); }
-    .portfolio__grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1.75rem; }
 
-    .portfolio-card { border-radius:var(--rl); overflow:hidden; background:var(--white); box-shadow:var(--sh-sm); transition:all var(--ease); }
-    .portfolio-card:hover { transform:translateY(-6px); box-shadow:var(--sh-lg); }
-    .portfolio-card.hidden { display:none; }
-
-    .portfolio-card__image { position:relative; height:230px; overflow:hidden; }
-    .portfolio-card__img   { width:100%; height:100%; object-fit:cover; transition:transform .5s ease; display:block; }
-    .portfolio-card:hover .portfolio-card__img { transform:scale(1.07); }
-    .portfolio-card__badge {
-      position:absolute; top:1rem; left:1rem;
-      padding:.3rem .875rem; border-radius:50px;
-      font-size:.75rem; font-weight:600; text-transform:uppercase; letter-spacing:.08em;
-      background:var(--accent); color:var(--white);
+    .pf-tabs { display:flex; gap:.5rem; justify-content:center; flex-wrap:wrap; margin-bottom:3rem; }
+    .pf-tab {
+      padding:.5rem 1.25rem; border-radius:999px; font-size:.875rem; font-weight:600;
+      border:2px solid var(--gray-l); background:transparent; color:var(--gray);
+      cursor:pointer; transition:all var(--ease); white-space:nowrap;
     }
-    .portfolio-card__body  { padding:1.375rem 1.5rem 1.75rem; }
-    .portfolio-card__title { font-size:1.05rem; font-weight:600; color:var(--primary); margin-bottom:.375rem; }
-    .portfolio-card__desc  { font-size:.875rem; color:var(--gray); }
+    .pf-tab.active { background:var(--primary); color:var(--white); border-color:var(--primary); }
+    .pf-tab:hover:not(.active) { border-color:var(--primary); color:var(--primary); }
+
+    .album-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1.75rem; }
+    .album-card {
+      border-radius:var(--rl); overflow:hidden; background:var(--white);
+      box-shadow:var(--sh-sm); cursor:pointer;
+      transition:transform var(--ease), box-shadow var(--ease);
+    }
+    .album-card:hover { transform:translateY(-6px); box-shadow:var(--sh-lg); }
+    .album-card__cover { position:relative; aspect-ratio:4/3; overflow:hidden; background:var(--gray-l); }
+    .album-card__cover img { width:100%; height:100%; object-fit:cover; transition:transform .5s ease; display:block; }
+    .album-card:hover .album-card__cover img { transform:scale(1.07); }
+    .album-card__overlay {
+      position:absolute; inset:0;
+      background:linear-gradient(to top,rgba(0,0,0,.65) 0%,transparent 55%);
+      display:flex; align-items:flex-end; padding:.875rem;
+    }
+    .album-card__count {
+      display:inline-flex; align-items:center; gap:.3rem;
+      background:rgba(255,255,255,.18); backdrop-filter:blur(6px);
+      border-radius:999px; padding:.2rem .7rem;
+      font-size:.75rem; color:#fff; font-weight:600;
+    }
+    .album-card__body { padding:1.125rem 1.25rem 1.375rem; }
+    .album-card__title { font-family:var(--font-d); font-size:1rem; color:var(--primary); font-weight:700; margin-bottom:.25rem; }
+    .album-card__sub { font-size:.8125rem; color:var(--gray); }
+    .album-empty { grid-column:1/-1; text-align:center; padding:4rem 1rem; color:var(--gray); font-size:.9375rem; }
+
+    .lightbox {
+      position:fixed; inset:0; z-index:9000; background:rgba(0,0,0,.96);
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      opacity:0; pointer-events:none; transition:opacity .25s ease;
+    }
+    .lightbox.open { opacity:1; pointer-events:all; }
+    .lightbox__close {
+      position:absolute; top:1rem; right:1.25rem; color:#fff;
+      background:rgba(255,255,255,.12); border:none; width:42px; height:42px;
+      border-radius:50%; font-size:1.5rem; line-height:1; cursor:pointer;
+      display:flex; align-items:center; justify-content:center; transition:background var(--ease);
+    }
+    .lightbox__close:hover { background:rgba(255,255,255,.25); }
+    .lightbox__album-title {
+      position:absolute; top:1.2rem; left:50%; transform:translateX(-50%);
+      color:#fff; font-size:.9375rem; font-weight:600; white-space:nowrap;
+      text-shadow:0 1px 4px rgba(0,0,0,.5); pointer-events:none;
+    }
+    .lightbox__main { display:flex; align-items:center; gap:1rem; max-width:90vw; }
+    .lightbox__img { max-height:62vh; max-width:78vw; border-radius:8px; object-fit:contain; display:block; }
+    .lightbox__arrow {
+      width:44px; height:44px; background:rgba(255,255,255,.12); border:none;
+      border-radius:50%; color:#fff; font-size:1.375rem; cursor:pointer; flex-shrink:0;
+      display:flex; align-items:center; justify-content:center; transition:background var(--ease);
+    }
+    .lightbox__arrow:hover { background:rgba(255,255,255,.28); }
+    .lightbox__counter { color:rgba(255,255,255,.55); font-size:.8125rem; margin-top:.625rem; }
+    .lightbox__caption { color:rgba(255,255,255,.8); font-size:.875rem; margin-top:.2rem; min-height:1.2em; }
+    .lightbox__thumbs {
+      display:flex; gap:.5rem; margin-top:.875rem; max-width:80vw;
+      overflow-x:auto; padding:.2rem; scrollbar-width:thin; scrollbar-color:rgba(255,255,255,.25) transparent;
+    }
+    .lightbox__thumb {
+      width:54px; height:54px; border-radius:6px; object-fit:cover; flex-shrink:0;
+      cursor:pointer; opacity:.45; border:2px solid transparent; transition:opacity .2s, border-color .2s;
+    }
+    .lightbox__thumb.active, .lightbox__thumb:hover { opacity:1; border-color:var(--accent); }
 
     /* ===================== [6] VIDÉOS ===================== */
     .videos { padding:6rem 0; background:var(--primary); position:relative; overflow:hidden; }
@@ -516,8 +565,9 @@
       .services__grid { grid-template-columns:repeat(2,1fr); gap:1.25rem; }
 
       /* Portfolio */
-      .portfolio__grid { grid-template-columns:repeat(2,1fr); gap:1.25rem; }
-      .portfolio-card { height:280px; }
+      .album-grid { grid-template-columns:repeat(2,1fr); gap:1.25rem; }
+      .pf-tabs { gap:.375rem; }
+      .pf-tab { padding:.4rem .9rem; font-size:.8125rem; }
 
       /* Vidéos */
       .videos__grid { grid-template-columns:1fr; max-width:500px; margin-inline:auto; }
@@ -561,8 +611,11 @@
       .section-header { margin-bottom:1.875rem; }
 
       /* Grilles */
-      .services__grid, .portfolio__grid { grid-template-columns:1fr; }
-      .portfolio-card { height:240px; }
+      .services__grid { grid-template-columns:1fr; }
+      .album-grid { grid-template-columns:1fr; }
+      .lightbox__img { max-height:55vh; max-width:92vw; }
+      .lightbox__arrow { width:36px; height:36px; font-size:1.1rem; }
+      .lightbox__thumb { width:44px; height:44px; }
 
       /* Stats */
       .stats { padding:2rem 1rem; }
@@ -912,85 +965,34 @@
       <span class="section-header__label">Notre travail</span>
       <h2 class="section-header__title">Nos Réalisations</h2>
       <div class="accent-line"></div>
-      <p class="section-header__desc">Découvrez une sélection de nos projets réalisés avec passion et expertise à travers toute la Côte d'Ivoire.</p>
+      <p class="section-header__desc">Explorez nos projets et nos voyages à travers nos galeries photos.</p>
     </div>
 
-    <div class="portfolio__filters reveal" role="group" aria-label="Filtrer les réalisations">
-      <button class="filter-btn active" data-filter="all"            aria-pressed="true">Tous</button>
-      <button class="filter-btn"        data-filter="btp"            aria-pressed="false">BTP</button>
-      <button class="filter-btn"        data-filter="rehabilitation" aria-pressed="false">Réhabilitation</button>
-      <button class="filter-btn"        data-filter="lotissement"    aria-pressed="false">Lotissement</button>
+    <div class="pf-tabs reveal" role="tablist" aria-label="Catégories de réalisations">
+      <button class="pf-tab active" data-cat="tous"     role="tab" aria-selected="true">Tous</button>
+      <button class="pf-tab"        data-cat="realises" role="tab" aria-selected="false">Réalisés</button>
+      <button class="pf-tab"        data-cat="en-cours" role="tab" aria-selected="false">En Cours</button>
+      <button class="pf-tab"        data-cat="visite"   role="tab" aria-selected="false">Visite Chantier / Site</button>
+      <button class="pf-tab"        data-cat="voyage"   role="tab" aria-selected="false">Voyage d'Affaires</button>
     </div>
 
-    <div class="portfolio__grid" id="portfolioGrid">
-      <article class="portfolio-card reveal" data-category="btp">
-        <div class="portfolio-card__image">
-          <img class="portfolio-card__img" src="https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=600&h=400&q=80" alt="Résidence Les Palmiers — immeuble R+4 à Cocody" loading="lazy" />
-          <span class="portfolio-card__badge">BTP</span>
-        </div>
-        <div class="portfolio-card__body">
-          <h3 class="portfolio-card__title">Résidence Les Palmiers</h3>
-          <p class="portfolio-card__desc">Immeuble R+4 — 24 appartements, Abidjan Cocody</p>
-        </div>
-      </article>
-
-      <article class="portfolio-card reveal" data-category="lotissement" style="transition-delay:.1s">
-        <div class="portfolio-card__image">
-          <img class="portfolio-card__img" src="https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=600&h=400&q=80" alt="Lotissement Étoile du Sud — 180 parcelles" loading="lazy" />
-          <span class="portfolio-card__badge">Lotissement</span>
-        </div>
-        <div class="portfolio-card__body">
-          <h3 class="portfolio-card__title">Lotissement Étoile du Sud</h3>
-          <p class="portfolio-card__desc">180 parcelles viabilisées — Bingerville, Grand Bassam</p>
-        </div>
-      </article>
-
-      <article class="portfolio-card reveal" data-category="rehabilitation" style="transition-delay:.2s">
-        <div class="portfolio-card__image">
-          <img class="portfolio-card__img" src="https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&h=400&q=80" alt="Centre Commercial Plateau — réhabilitation" loading="lazy" />
-          <span class="portfolio-card__badge">Réhabilitation</span>
-        </div>
-        <div class="portfolio-card__body">
-          <h3 class="portfolio-card__title">Centre Commercial Plateau</h3>
-          <p class="portfolio-card__desc">Rénovation complète — 2 200 m², mise aux normes incendie</p>
-        </div>
-      </article>
-
-      <article class="portfolio-card reveal" data-category="btp" style="transition-delay:.1s">
-        <div class="portfolio-card__image">
-          <img class="portfolio-card__img" src="https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=600&h=400&q=80" alt="Complexe Villa Ivoire — 12 villas" loading="lazy" />
-          <span class="portfolio-card__badge">BTP</span>
-        </div>
-        <div class="portfolio-card__body">
-          <h3 class="portfolio-card__title">Complexe Villa Ivoire</h3>
-          <p class="portfolio-card__desc">12 villas haut standing — Yopougon, livraison 2023</p>
-        </div>
-      </article>
-
-      <article class="portfolio-card reveal" data-category="btp" style="transition-delay:.2s">
-        <div class="portfolio-card__image">
-          <img class="portfolio-card__img" src="https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=600&h=400&q=80" alt="Immeuble de bureaux Marcory R+6" loading="lazy" />
-          <span class="portfolio-card__badge">BTP</span>
-        </div>
-        <div class="portfolio-card__body">
-          <h3 class="portfolio-card__title">Immeuble de Bureaux Marcory</h3>
-          <p class="portfolio-card__desc">R+6 — 3 500 m² surfaces de bureaux, certification HQE</p>
-        </div>
-      </article>
-
-      <article class="portfolio-card reveal" data-category="lotissement" style="transition-delay:.3s">
-        <div class="portfolio-card__image">
-          <img class="portfolio-card__img" src="https://images.unsplash.com/photo-1448630360428-65456885c650?auto=format&fit=crop&w=600&h=400&q=80" alt="Zone résidentielle Anyama Nord" loading="lazy" />
-          <span class="portfolio-card__badge">Lotissement</span>
-        </div>
-        <div class="portfolio-card__body">
-          <h3 class="portfolio-card__title">Zone Résidentielle Anyama Nord</h3>
-          <p class="portfolio-card__desc">95 parcelles + voiries + réseaux — Anyama</p>
-        </div>
-      </article>
-    </div>
+    <div class="album-grid" id="albumGrid"></div>
   </div>
 </section>
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Galerie photos">
+  <button class="lightbox__close" id="lbClose" aria-label="Fermer">&times;</button>
+  <p class="lightbox__album-title" id="lbAlbumTitle"></p>
+  <div class="lightbox__main">
+    <button class="lightbox__arrow" id="lbPrev" aria-label="Photo précédente">&#8249;</button>
+    <img class="lightbox__img" id="lbImg" src="" alt="" />
+    <button class="lightbox__arrow" id="lbNext" aria-label="Photo suivante">&#8250;</button>
+  </div>
+  <p class="lightbox__counter" id="lbCounter"></p>
+  <p class="lightbox__caption" id="lbCaption"></p>
+  <div class="lightbox__thumbs" id="lbThumbs"></div>
+</div>
 
 <!-- ============================================================
      [6] VIDÉOS YOUTUBE
@@ -1437,17 +1439,141 @@ const cntObs = new IntersectionObserver(
 );
 document.querySelectorAll('.counter').forEach(el => cntObs.observe(el));
 
-/* --- Portfolio filter --- */
-const filterBtns     = document.querySelectorAll('.filter-btn');
-const portfolioCards = document.querySelectorAll('.portfolio-card');
-filterBtns.forEach(btn => {
+/* --- Portfolio Albums --- */
+const PF_CAT_LABELS = { tous:'Tous', realises:'Réalisés', 'en-cours':'En Cours', visite:'Visite Chantier/Site', voyage:"Voyage d'Affaires" };
+const PF_DEFAULT_ALBUMS = [
+  { id:'d1', title:'Résidence Les Palmiers', subtitle:'Immeuble R+4, Cocody — Abidjan', category:'realises',
+    cover:'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=600&h=400&q=80',
+    photos:[
+      {src:'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&h=800&q=80',caption:'Vue extérieure'},
+      {src:'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1200&h=800&q=80',caption:''}
+    ]
+  },
+  { id:'d2', title:'Lotissement Étoile du Sud', subtitle:'180 parcelles — Bingerville', category:'realises',
+    cover:'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=600&h=400&q=80',
+    photos:[{src:'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&h=800&q=80',caption:'Vue aérienne'}]
+  },
+  { id:'d3', title:'Complexe Villa Ivoire', subtitle:'12 villas haut standing — Yopougon', category:'en-cours',
+    cover:'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=600&h=400&q=80',
+    photos:[{src:'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&h=800&q=80',caption:'Façade principale'}]
+  },
+  { id:'d4', title:'Visite Chantier Anyama', subtitle:'Suivi de chantier — Zone résidentielle', category:'visite',
+    cover:'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&h=400&q=80',
+    photos:[{src:'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=1200&h=800&q=80',caption:'Inspection des travaux'}]
+  },
+  { id:'d5', title:"Voyage d'Affaires Maroc", subtitle:'Partenariats immobiliers — Casablanca', category:'voyage',
+    cover:'https://images.unsplash.com/photo-1552832230-c0197dd311b5?auto=format&fit=crop&w=600&h=400&q=80',
+    photos:[{src:'https://images.unsplash.com/photo-1552832230-c0197dd311b5?auto=format&fit=crop&w=1200&h=800&q=80',caption:'Réunion partenaires'}]
+  }
+];
+
+function pfGetAlbums() {
+  const cfg = JSON.parse(localStorage.getItem('sgci_config') || '{}');
+  return (cfg.portfolio_albums && cfg.portfolio_albums.length) ? cfg.portfolio_albums : PF_DEFAULT_ALBUMS;
+}
+
+function pfRenderAlbums(cat) {
+  const grid = document.getElementById('albumGrid');
+  const albums = pfGetAlbums().filter(a => cat === 'tous' || a.category === cat);
+  if (!albums.length) {
+    grid.innerHTML = '<p class="album-empty">Aucun album dans cette catégorie.<br>Ajoutez-en depuis la page Admin.</p>';
+    return;
+  }
+  grid.innerHTML = albums.map((a, i) => {
+    const count = (a.photos && a.photos.length) ? a.photos.length : 0;
+    const coverSrc = a.cover || '';
+    return `
+    <div class="album-card reveal" style="transition-delay:${i * .08}s" onclick="pfOpenLightbox('${a.id}',0)" role="button" tabindex="0" aria-label="Ouvrir l'album ${a.title}">
+      <div class="album-card__cover">
+        ${coverSrc ? `<img src="${coverSrc}" alt="${a.title}" loading="lazy" />` : '<div style="width:100%;height:100%;background:var(--gray-l)"></div>'}
+        <div class="album-card__overlay">
+          <span class="album-card__count">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            ${count} photo${count !== 1 ? 's' : ''}
+          </span>
+        </div>
+      </div>
+      <div class="album-card__body">
+        <p class="album-card__title">${a.title}</p>
+        <p class="album-card__sub">${a.subtitle || PF_CAT_LABELS[a.category] || ''}</p>
+      </div>
+    </div>`;
+  }).join('');
+  grid.querySelectorAll('.album-card').forEach(el => {
+    revealObs.observe(el);
+    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') el.click(); });
+  });
+}
+
+document.querySelectorAll('.pf-tab').forEach(btn => {
   btn.addEventListener('click', () => {
-    const f = btn.dataset.filter;
-    filterBtns.forEach(b => { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
-    btn.classList.add('active'); btn.setAttribute('aria-pressed', 'true');
-    portfolioCards.forEach(card => card.classList.toggle('hidden', f !== 'all' && card.dataset.category !== f));
+    document.querySelectorAll('.pf-tab').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected','false'); });
+    btn.classList.add('active'); btn.setAttribute('aria-selected','true');
+    pfRenderAlbums(btn.dataset.cat);
   });
 });
+
+/* --- Lightbox --- */
+let _lbAlbum = null, _lbIndex = 0;
+
+function pfOpenLightbox(albumId, startIndex) {
+  _lbAlbum = pfGetAlbums().find(a => a.id === albumId);
+  if (!_lbAlbum || !_lbAlbum.photos || !_lbAlbum.photos.length) return;
+  _lbIndex = startIndex || 0;
+  document.getElementById('lbAlbumTitle').textContent = _lbAlbum.title;
+  _lbRender();
+  document.getElementById('lightbox').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function _lbClose() {
+  document.getElementById('lightbox').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function _lbRender() {
+  const photo = _lbAlbum.photos[_lbIndex];
+  const src = photo.src || photo;
+  const cap = photo.caption || '';
+  document.getElementById('lbImg').src = src;
+  document.getElementById('lbImg').alt = cap || _lbAlbum.title;
+  document.getElementById('lbCounter').textContent = `${_lbIndex + 1} / ${_lbAlbum.photos.length}`;
+  document.getElementById('lbCaption').textContent = cap;
+  const thumbs = document.getElementById('lbThumbs');
+  thumbs.innerHTML = _lbAlbum.photos.map((p, i) =>
+    `<img class="lightbox__thumb${i === _lbIndex ? ' active' : ''}" src="${p.src || p}" alt="" loading="lazy" onclick="_lbGoto(${i})" />`
+  ).join('');
+  const active = thumbs.querySelector('.active');
+  if (active) active.scrollIntoView({ inline:'center', block:'nearest' });
+}
+
+function _lbGoto(i) { _lbIndex = i; _lbRender(); }
+
+document.getElementById('lbPrev').addEventListener('click', () => {
+  _lbIndex = (_lbIndex - 1 + _lbAlbum.photos.length) % _lbAlbum.photos.length; _lbRender();
+});
+document.getElementById('lbNext').addEventListener('click', () => {
+  _lbIndex = (_lbIndex + 1) % _lbAlbum.photos.length; _lbRender();
+});
+document.getElementById('lbClose').addEventListener('click', _lbClose);
+document.getElementById('lightbox').addEventListener('click', e => { if (e.target === document.getElementById('lightbox')) _lbClose(); });
+document.addEventListener('keydown', e => {
+  if (!document.getElementById('lightbox').classList.contains('open')) return;
+  if (e.key === 'Escape') _lbClose();
+  if (e.key === 'ArrowLeft')  { _lbIndex = (_lbIndex - 1 + _lbAlbum.photos.length) % _lbAlbum.photos.length; _lbRender(); }
+  if (e.key === 'ArrowRight') { _lbIndex = (_lbIndex + 1) % _lbAlbum.photos.length; _lbRender(); }
+});
+/* touch swipe */
+(function() {
+  let _sx = 0;
+  const lb = document.getElementById('lightbox');
+  lb.addEventListener('touchstart', e => { _sx = e.touches[0].clientX; }, { passive:true });
+  lb.addEventListener('touchend', e => {
+    if (!_lbAlbum) return;
+    const dx = e.changedTouches[0].clientX - _sx;
+    if (Math.abs(dx) > 50) { _lbIndex = dx < 0 ? (_lbIndex+1)%_lbAlbum.photos.length : (_lbIndex-1+_lbAlbum.photos.length)%_lbAlbum.photos.length; _lbRender(); }
+  }, { passive:true });
+})();
 
 /* --- Config loader (depuis admin.html / localStorage) --- */
 (function applySGCIConfig() {
@@ -1477,6 +1603,8 @@ filterBtns.forEach(btn => {
   setVideo('sgci-video1', cfg.video1_id); setVideo('sgci-video2', cfg.video2_id); setVideo('sgci-video3', cfg.video3_id);
   setHTML('sgci-contact-phones', cfg.contact_phones); setHTML('sgci-contact-emails', cfg.contact_emails);
 })();
+
+pfRenderAlbums('tous');
 
 /* --- Contact form → WhatsApp --- */
 const WHATSAPP_NUMBER = (JSON.parse(localStorage.getItem('sgci_config') || '{}')).contact_whatsapp || '2250546493904';
