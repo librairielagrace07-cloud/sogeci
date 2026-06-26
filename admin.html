@@ -177,7 +177,7 @@
     background: var(--red); color: #fff; border: none; cursor: pointer;
     font-size: .6875rem; line-height: 1; display: flex; align-items: center; justify-content: center;
   }
-  .pf-cover-preview-wrap { width: 100px; height: 70px; border-radius: 8px; background: var(--gray-l); overflow: hidden; flex-shrink: 0; }
+  .pf-cover-preview-wrap { width: 180px; height: 135px; border-radius: 8px; background: var(--gray-l); overflow: hidden; flex-shrink: 0; }
   .pf-cover-preview-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .badge-cat {
     display: inline-block; padding: .15rem .55rem; border-radius: 999px; font-size: .7rem; font-weight: 700;
@@ -851,7 +851,7 @@ function pfHandleCover(input) {
   const reader = new FileReader();
   reader.onload = async e => {
     /* Couverture plein format stockée dans IndexedDB */
-    const compressed = await pfCompress(e.target.result, 900, 675, 0.85);
+    const compressed = await pfCompress(e.target.result, 1200, 900, 0.92);
     _pfCoverData = compressed;
     const img = document.getElementById('pf-cover-img');
     img.src = compressed; img.style.display = 'block';
@@ -974,8 +974,11 @@ function pfEditAlbum(id) {
 
   /* ── Partie ASYNC : charge cover + photos depuis IndexedDB ── */
   _idbGet(id).then(idbData => {
+    if (_pfEditId !== id) return; /* L'utilisateur a changé d'album entretemps */
     if (idbData.cover) { coverImg.src = idbData.cover; coverImg.style.display = 'block'; }
-    _pfPhotosData = idbData.photos || [];
+    /* Merger : photos DB existantes + photos déjà ajoutées par l'utilisateur (race condition) */
+    const alreadyAdded = _pfPhotosData.slice();
+    _pfPhotosData = [...(idbData.photos || []), ...alreadyAdded];
     pfRenderPhotoStrip();
   }).catch(err => {
     console.warn('pfEditAlbum: IndexedDB non disponible', err);
