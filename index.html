@@ -1439,6 +1439,25 @@ const cntObs = new IntersectionObserver(
 );
 document.querySelectorAll('.counter').forEach(el => cntObs.observe(el));
 
+/* --- IndexedDB helpers (partagé avec admin.html) --- */
+let _idb = null;
+function _idbOpen() {
+  return new Promise((ok, fail) => {
+    if (_idb) { ok(_idb); return; }
+    const r = indexedDB.open('sgci_photos', 1);
+    r.onupgradeneeded = e => e.target.result.createObjectStore('photos', { keyPath: 'albumId' });
+    r.onsuccess = e => { _idb = e.target.result; ok(_idb); };
+    r.onerror = () => fail(r.error);
+  });
+}
+function _idbGet(albumId) {
+  return _idbOpen().then(db => new Promise((ok, fail) => {
+    const r = db.transaction('photos').objectStore('photos').get(albumId);
+    r.onsuccess = () => ok(r.result ? r.result.photos : []);
+    r.onerror = () => fail(r.error);
+  }));
+}
+
 /* --- Portfolio Albums --- */
 const PF_CAT_LABELS = { tous:'Tous', realises:'Réalisés', 'en-cours':'En Cours', visite:'Visite Chantier/Site', voyage:"Voyage d'Affaires" };
 const PF_DEFAULT_ALBUMS = [
@@ -1480,7 +1499,7 @@ function pfRenderAlbums(cat) {
     return;
   }
   grid.innerHTML = albums.map((a, i) => {
-    const count = (a.photos && a.photos.length) ? a.photos.length : 0;
+    const count = a.photoCount !== undefined ? a.photoCount : (a.photos ? a.photos.length : 0);
     const coverSrc = a.cover || '';
     return `
     <div class="album-card reveal" style="transition-delay:${i * .08}s" onclick="pfOpenLightbox('${a.id}',0)" role="button" tabindex="0" aria-label="Ouvrir l'album ${a.title}">
@@ -1516,9 +1535,21 @@ document.querySelectorAll('.pf-tab').forEach(btn => {
 /* --- Lightbox --- */
 let _lbAlbum = null, _lbIndex = 0;
 
-function pfOpenLightbox(albumId, startIndex) {
-  _lbAlbum = pfGetAlbums().find(a => a.id === albumId);
-  if (!_lbAlbum || !_lbAlbum.photos || !_lbAlbum.photos.length) return;
+async function pfOpenLightbox(albumId, startIndex) {
+  const meta = pfGetAlbums().find(a => a.id === albumId);
+  if (!meta) return;
+
+  /* Albums démo → photos inline. Albums admin → IndexedDB. */
+  let photos;
+  if (meta.photoCount !== undefined) {
+    photos = await _idbGet(albumId);
+    if (!photos || !photos.length) photos = meta.photos || [];
+  } else {
+    photos = meta.photos || [];
+  }
+
+  if (!photos.length) return;
+  _lbAlbum = { ...meta, photos };
   _lbIndex = startIndex || 0;
   document.getElementById('lbAlbumTitle').textContent = _lbAlbum.title;
   _lbRender();

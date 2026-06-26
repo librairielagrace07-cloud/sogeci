@@ -553,7 +553,7 @@ function checkPassword() {
   const val = document.getElementById('pwd-input').value;
   if (val === getPassword()) {
     document.getElementById('auth-gate').style.display = 'none';
-    loadForm();
+    pfMigrateOldAlbums().finally(loadForm);
   } else {
     document.getElementById('auth-error').style.display = 'block';
   }
@@ -685,6 +685,29 @@ function resetConfig() {
   setTimeout(() => { s.textContent = 'Modifications non enregistrées'; s.className = 'save-status'; }, 3000);
 }
 
+/* Migration : anciens albums avec photos inline → IndexedDB */
+async function pfMigrateOldAlbums() {
+  const cfg = JSON.parse(localStorage.getItem('sgci_config') || '{}');
+  const albums = cfg.portfolio_albums || [];
+  let changed = false;
+  for (const a of albums) {
+    if (a.photos && a.photos.length) {
+      await _idbPut(a.id, a.photos);
+      a.photoCount = a.photos.length;
+      delete a.photos;
+      changed = true;
+    }
+    if (a.cover && a.cover.startsWith('data:') && a.cover.length > 60000) {
+      a.cover = await pfCompress(a.cover, 320, 240, 0.65);
+      changed = true;
+    }
+  }
+  if (changed) {
+    cfg.portfolio_albums = albums;
+    try { localStorage.setItem('sgci_config', JSON.stringify(cfg)); } catch(_) {}
+  }
+}
+
 function loadForm() {
   const cfg = JSON.parse(localStorage.getItem('sgci_config') || '{}');
   const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
@@ -732,9 +755,42 @@ document.querySelectorAll('input, textarea').forEach(el => {
   }
 });
 
+/* ─── IndexedDB — stockage des photos de galerie (quota >> 5 Mo) ─── */
+let _idb = null;
+function _idbOpen() {
+  return new Promise((ok, fail) => {
+    if (_idb) { ok(_idb); return; }
+    const r = indexedDB.open('sgci_photos', 1);
+    r.onupgradeneeded = e => e.target.result.createObjectStore('photos', { keyPath: 'albumId' });
+    r.onsuccess = e => { _idb = e.target.result; ok(_idb); };
+    r.onerror = () => fail(r.error);
+  });
+}
+function _idbPut(albumId, photos) {
+  return _idbOpen().then(db => new Promise((ok, fail) => {
+    const tx = db.transaction('photos', 'readwrite');
+    tx.objectStore('photos').put({ albumId, photos });
+    tx.oncomplete = ok; tx.onerror = () => fail(tx.error);
+  }));
+}
+function _idbGet(albumId) {
+  return _idbOpen().then(db => new Promise((ok, fail) => {
+    const r = db.transaction('photos').objectStore('photos').get(albumId);
+    r.onsuccess = () => ok(r.result ? r.result.photos : []);
+    r.onerror = () => fail(r.error);
+  }));
+}
+function _idbDel(albumId) {
+  return _idbOpen().then(db => new Promise((ok, fail) => {
+    const tx = db.transaction('photos', 'readwrite');
+    tx.objectStore('photos').delete(albumId);
+    tx.oncomplete = ok; tx.onerror = () => fail(tx.error);
+  }));
+}
+
 /* ─── Portfolio Admin ─── */
 const PF_CAT_LABELS = { realises:'Réalisés', 'en-cours':'En Cours', visite:'Visite Chantier/Site', voyage:"Voyage d'Affaires" };
-let _pfEditId   = null;
+let _pfEditId    = null;
 let _pfCoverData = null;
 let _pfPhotosData = [];
 
@@ -746,18 +802,10 @@ function pfGetAlbums() {
 function pfSetAlbums(albums) {
   const cfg = JSON.parse(localStorage.getItem('sgci_config') || '{}');
   cfg.portfolio_albums = albums;
-  try {
-    localStorage.setItem('sgci_config', JSON.stringify(cfg));
-  } catch (e) {
-    const msg = 'Espace de stockage plein. Supprimez des albums existants ou utilisez des photos plus légères (< 1 Mo).';
-    const s = document.getElementById('save-status');
-    s.textContent = '⚠ ' + msg; s.className = 'save-status err';
-    setTimeout(() => { s.textContent = ''; s.className = 'save-status'; }, 6000);
-    throw e;
-  }
+  localStorage.setItem('sgci_config', JSON.stringify(cfg));
 }
 
-/* Compression canvas : réduit les images lourdes avant stockage */
+/* Compression canvas */
 function pfCompress(dataUrl, maxW, maxH, quality) {
   return new Promise(resolve => {
     const img = new Image();
@@ -780,7 +828,8 @@ function pfHandleCover(input) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = async e => {
-    const compressed = await pfCompress(e.target.result, 800, 600, 0.72);
+    /* Miniature de couverture — petite pour rester dans localStorage */
+    const compressed = await pfCompress(e.target.result, 320, 240, 0.65);
     _pfCoverData = compressed;
     const img = document.getElementById('pf-cover-img');
     img.src = compressed; img.style.display = 'block';
@@ -793,7 +842,8 @@ function pfHandlePhotos(input) {
   files.forEach(file => {
     const reader = new FileReader();
     reader.onload = async e => {
-      const compressed = await pfCompress(e.target.result, 1200, 900, 0.78);
+      /* Photos galerie — vont dans IndexedDB, peuvent être plus lourdes */
+      const compressed = await pfCompress(e.target.result, 1400, 1050, 0.80);
       _pfPhotosData.push({ src: compressed, caption: '' });
       pfRenderPhotoStrip();
     };
@@ -817,50 +867,67 @@ function pfRemovePhoto(idx) {
   pfRenderPhotoStrip();
 }
 
-function pfSaveAlbum() {
+async function pfSaveAlbum() {
   const title = document.getElementById('pf-title').value.trim();
   if (!title) { document.getElementById('pf-title').focus(); return; }
-  const albums = pfGetAlbums();
-  const album = {
-    id:       _pfEditId || ('alb-' + Date.now()),
-    title:    title,
-    subtitle: document.getElementById('pf-subtitle').value.trim(),
-    category: document.getElementById('pf-category').value,
-    cover:    _pfCoverData || (_pfEditId ? (albums.find(a => a.id === _pfEditId) || {}).cover || '' : ''),
-    photos:   _pfPhotosData.length ? _pfPhotosData : (_pfEditId ? (albums.find(a => a.id === _pfEditId) || {}).photos || [] : [])
-  };
-  if (_pfEditId) {
-    const idx = albums.findIndex(a => a.id === _pfEditId);
-    if (idx !== -1) albums[idx] = album; else albums.push(album);
-  } else {
-    albums.push(album);
-  }
+
+  const btn = document.getElementById('pf-save-btn');
+  btn.disabled = true; btn.textContent = 'Enregistrement…';
+
+  const albumId = _pfEditId || ('alb-' + Date.now());
+  const albums  = pfGetAlbums();
+
   try {
+    /* Photos → IndexedDB (quota illimité) */
+    await _idbPut(albumId, _pfPhotosData);
+
+    /* Métadonnées + miniature couverture → localStorage (léger) */
+    const meta = {
+      id:         albumId,
+      title,
+      subtitle:   document.getElementById('pf-subtitle').value.trim(),
+      category:   document.getElementById('pf-category').value,
+      cover:      _pfCoverData || (_pfEditId ? (albums.find(a => a.id === _pfEditId) || {}).cover || '' : ''),
+      photoCount: _pfPhotosData.length
+    };
+
+    if (_pfEditId) {
+      const idx = albums.findIndex(a => a.id === _pfEditId);
+      if (idx !== -1) albums[idx] = meta; else albums.push(meta);
+    } else {
+      albums.push(meta);
+    }
     pfSetAlbums(albums);
-  } catch (e) {
-    return;
+
+    pfCancelEdit();
+    pfRenderAlbumList();
+    const s = document.getElementById('save-status');
+    s.textContent = '✓ Album enregistré'; s.className = 'save-status ok';
+    setTimeout(() => { s.textContent = ''; s.className = 'save-status'; }, 2500);
+  } catch (err) {
+    console.error('pfSaveAlbum:', err);
+    const s = document.getElementById('save-status');
+    s.textContent = '⚠ Erreur : ' + (err.message || err); s.className = 'save-status err';
+    setTimeout(() => { s.textContent = ''; s.className = 'save-status'; }, 6000);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = _pfEditId ? 'Enregistrer les modifications' : 'Créer l\'album';
   }
-  pfCancelEdit();
-  pfRenderAlbumList();
-  markUnsaved();
-  const s = document.getElementById('save-status');
-  s.textContent = '✓ Album enregistré'; s.className = 'save-status ok';
-  setTimeout(() => { s.textContent = ''; s.className = 'save-status'; }, 2000);
 }
 
-function pfDeleteAlbum(id) {
+async function pfDeleteAlbum(id) {
   if (!confirm('Supprimer cet album et toutes ses photos ?')) return;
+  await _idbDel(id);
   pfSetAlbums(pfGetAlbums().filter(a => a.id !== id));
   pfRenderAlbumList();
-  markUnsaved();
 }
 
-function pfEditAlbum(id) {
+async function pfEditAlbum(id) {
   const album = pfGetAlbums().find(a => a.id === id);
   if (!album) return;
-  _pfEditId = id;
+  _pfEditId    = id;
   _pfCoverData = null;
-  _pfPhotosData = album.photos ? album.photos.map(p => ({ ...p })) : [];
+  _pfPhotosData = await _idbGet(id);
   document.getElementById('pf-title').value    = album.title    || '';
   document.getElementById('pf-subtitle').value = album.subtitle || '';
   document.getElementById('pf-category').value = album.category || 'realises';
@@ -897,7 +964,7 @@ function pfRenderAlbumList() {
     return;
   }
   list.innerHTML = albums.map(a => {
-    const photoCount = a.photos ? a.photos.length : 0;
+    const photoCount = a.photoCount !== undefined ? a.photoCount : 0;
     const coverSrc   = a.cover || '';
     return `
     <div class="pf-album-list-item">
