@@ -894,9 +894,10 @@ async function pfSaveAlbum() {
   try {
     /* Couverture + photos → IndexedDB (quota illimité) */
     const existingIdb = _pfEditId ? await _idbGet(_pfEditId) : { cover: '', photos: [] };
+    const finalPhotos = _pfPhotosData.length ? _pfPhotosData : existingIdb.photos;
     await _idbPut(albumId, {
       cover:  _pfCoverData || existingIdb.cover,
-      photos: _pfPhotosData
+      photos: finalPhotos
     });
 
     /* Métadonnées seules → localStorage (léger, pas de données image) */
@@ -905,7 +906,7 @@ async function pfSaveAlbum() {
       title,
       subtitle:   document.getElementById('pf-subtitle').value.trim(),
       category:   document.getElementById('pf-category').value,
-      photoCount: _pfPhotosData.length
+      photoCount: finalPhotos.length
     };
 
     if (_pfEditId) {
@@ -939,23 +940,38 @@ async function pfDeleteAlbum(id) {
   pfRenderAlbumList();
 }
 
-async function pfEditAlbum(id) {
+function pfEditAlbum(id) {
   const album = pfGetAlbums().find(a => a.id === id);
   if (!album) return;
-  _pfEditId    = id;
-  _pfCoverData = null;
-  const idbData = await _idbGet(id);
-  _pfPhotosData = idbData.photos;
+
+  /* ── Partie SYNCHRONE : formulaire visible immédiatement ── */
+  _pfEditId     = id;
+  _pfCoverData  = null;
+  _pfPhotosData = [];
+
   document.getElementById('pf-title').value    = album.title    || '';
   document.getElementById('pf-subtitle').value = album.subtitle || '';
   document.getElementById('pf-category').value = album.category || 'realises';
-  const img = document.getElementById('pf-cover-img');
-  if (idbData.cover) { img.src = idbData.cover; img.style.display = 'block'; }
+
+  const coverImg = document.getElementById('pf-cover-img');
+  coverImg.src = ''; coverImg.style.display = 'none';
   pfRenderPhotoStrip();
+
   document.querySelector('#pf-form-heading span').textContent = ' Modifier l\'album';
   document.getElementById('pf-save-btn').textContent = 'Enregistrer les modifications';
   document.getElementById('pf-cancel-btn').style.display = '';
-  document.querySelector('#tab-portfolio .section-card').scrollIntoView({ behavior:'smooth', block:'start' });
+
+  const firstCard = document.querySelector('#tab-portfolio .section-card');
+  if (firstCard) firstCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  /* ── Partie ASYNC : charge cover + photos depuis IndexedDB ── */
+  _idbGet(id).then(idbData => {
+    if (idbData.cover) { coverImg.src = idbData.cover; coverImg.style.display = 'block'; }
+    _pfPhotosData = idbData.photos || [];
+    pfRenderPhotoStrip();
+  }).catch(err => {
+    console.warn('pfEditAlbum: IndexedDB non disponible', err);
+  });
 }
 
 function pfCancelEdit() {
