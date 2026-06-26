@@ -773,24 +773,32 @@ function _idbOpen() {
     r.onerror = () => fail(r.error);
   });
 }
-function _idbPut(albumId, photos) {
+function _idbPut(albumId, data) {
   return _idbOpen().then(db => new Promise((ok, fail) => {
     const tx = db.transaction('photos', 'readwrite');
-    tx.objectStore('photos').put({ albumId, photos });
+    tx.objectStore('photos').put({ albumId, cover: data.cover || '', photos: data.photos || [] });
     tx.oncomplete = ok; tx.onerror = () => fail(tx.error);
   }));
+}
+function _idbUnpack(rec) {
+  if (!rec) return { cover: '', photos: [] };
+  /* Compatibilité format imbriqué (bug ancien) : { albumId, photos: { cover, photos } } */
+  if (rec.photos && !Array.isArray(rec.photos) && rec.photos.photos) {
+    return { cover: rec.photos.cover || '', photos: rec.photos.photos || [] };
+  }
+  return { cover: rec.cover || '', photos: rec.photos || [] };
 }
 function _idbGet(albumId) {
   return _idbOpen().then(db => new Promise((ok, fail) => {
     const r = db.transaction('photos').objectStore('photos').get(albumId);
-    r.onsuccess = () => ok(r.result ? { cover: r.result.cover || '', photos: r.result.photos || [] } : { cover: '', photos: [] });
+    r.onsuccess = () => ok(_idbUnpack(r.result));
     r.onerror = () => fail(r.error);
   }));
 }
 function _idbGetAll() {
   return _idbOpen().then(db => new Promise((ok, fail) => {
     const r = db.transaction('photos').objectStore('photos').getAll();
-    r.onsuccess = () => ok(r.result || []);
+    r.onsuccess = () => ok((r.result || []).map(rec => ({ albumId: rec.albumId, ..._idbUnpack(rec) })));
     r.onerror = () => fail(r.error);
   }));
 }
