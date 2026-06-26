@@ -691,16 +691,23 @@ async function pfMigrateOldAlbums() {
   const albums = cfg.portfolio_albums || [];
   let changed = false;
   for (const a of albums) {
+    const existing = await _idbGet(a.id);
+    let newCover  = existing.cover  || '';
+    let newPhotos = existing.photos || [];
+    let needIdb   = false;
+
     if (a.photos && a.photos.length) {
-      await _idbPut(a.id, a.photos);
+      newPhotos = a.photos;
       a.photoCount = a.photos.length;
       delete a.photos;
-      changed = true;
+      needIdb = true; changed = true;
     }
-    if (a.cover && a.cover.startsWith('data:') && a.cover.length > 60000) {
-      a.cover = await pfCompress(a.cover, 320, 240, 0.65);
-      changed = true;
+    if (a.cover && a.cover.startsWith('data:')) {
+      newCover = a.cover;
+      delete a.cover;  /* remove from localStorage — goes to IndexedDB */
+      needIdb = true; changed = true;
     }
+    if (needIdb) await _idbPut(a.id, { cover: newCover, photos: newPhotos });
   }
   if (changed) {
     cfg.portfolio_albums = albums;
@@ -776,7 +783,14 @@ function _idbPut(albumId, photos) {
 function _idbGet(albumId) {
   return _idbOpen().then(db => new Promise((ok, fail) => {
     const r = db.transaction('photos').objectStore('photos').get(albumId);
-    r.onsuccess = () => ok(r.result ? r.result.photos : []);
+    r.onsuccess = () => ok(r.result ? { cover: r.result.cover || '', photos: r.result.photos || [] } : { cover: '', photos: [] });
+    r.onerror = () => fail(r.error);
+  }));
+}
+function _idbGetAll() {
+  return _idbOpen().then(db => new Promise((ok, fail) => {
+    const r = db.transaction('photos').objectStore('photos').getAll();
+    r.onsuccess = () => ok(r.result || []);
     r.onerror = () => fail(r.error);
   }));
 }
@@ -828,8 +842,8 @@ function pfHandleCover(input) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = async e => {
-    /* Miniature de couverture — petite pour rester dans localStorage */
-    const compressed = await pfCompress(e.target.result, 320, 240, 0.65);
+    /* Couverture plein format stockée dans IndexedDB */
+    const compressed = await pfCompress(e.target.result, 900, 675, 0.85);
     _pfCoverData = compressed;
     const img = document.getElementById('pf-cover-img');
     img.src = compressed; img.style.display = 'block';
@@ -878,16 +892,19 @@ async function pfSaveAlbum() {
   const albums  = pfGetAlbums();
 
   try {
-    /* Photos → IndexedDB (quota illimité) */
-    await _idbPut(albumId, _pfPhotosData);
+    /* Couverture + photos → IndexedDB (quota illimité) */
+    const existingIdb = _pfEditId ? await _idbGet(_pfEditId) : { cover: '', photos: [] };
+    await _idbPut(albumId, {
+      cover:  _pfCoverData || existingIdb.cover,
+      photos: _pfPhotosData
+    });
 
-    /* Métadonnées + miniature couverture → localStorage (léger) */
+    /* Métadonnées seules → localStorage (léger, pas de données image) */
     const meta = {
       id:         albumId,
       title,
       subtitle:   document.getElementById('pf-subtitle').value.trim(),
       category:   document.getElementById('pf-category').value,
-      cover:      _pfCoverData || (_pfEditId ? (albums.find(a => a.id === _pfEditId) || {}).cover || '' : ''),
       photoCount: _pfPhotosData.length
     };
 
@@ -927,12 +944,13 @@ async function pfEditAlbum(id) {
   if (!album) return;
   _pfEditId    = id;
   _pfCoverData = null;
-  _pfPhotosData = await _idbGet(id);
+  const idbData = await _idbGet(id);
+  _pfPhotosData = idbData.photos;
   document.getElementById('pf-title').value    = album.title    || '';
   document.getElementById('pf-subtitle').value = album.subtitle || '';
   document.getElementById('pf-category').value = album.category || 'realises';
   const img = document.getElementById('pf-cover-img');
-  if (album.cover) { img.src = album.cover; img.style.display = 'block'; }
+  if (idbData.cover) { img.src = idbData.cover; img.style.display = 'block'; }
   pfRenderPhotoStrip();
   document.querySelector('#pf-form-heading span').textContent = ' Modifier l\'album';
   document.getElementById('pf-save-btn').textContent = 'Enregistrer les modifications';
@@ -954,7 +972,7 @@ function pfCancelEdit() {
   document.getElementById('pf-cancel-btn').style.display = 'none';
 }
 
-function pfRenderAlbumList() {
+async function pfRenderAlbumList() {
   const albums = pfGetAlbums();
   const list   = document.getElementById('pf-album-list');
   const count  = document.getElementById('pf-album-count');
@@ -963,15 +981,14 @@ function pfRenderAlbumList() {
     list.innerHTML = '<p style="color:var(--gray);font-size:.875rem;text-align:center;padding:2rem 0">Aucun album. Créez votre premier album ci-dessus.</p>';
     return;
   }
+  /* Render placeholders first */
   list.innerHTML = albums.map(a => {
     const photoCount = a.photoCount !== undefined ? a.photoCount : 0;
-    const coverSrc   = a.cover || '';
     return `
     <div class="pf-album-list-item">
-      ${coverSrc
-        ? `<img class="pf-cover-thumb" src="${coverSrc}" alt="${a.title}" />`
-        : `<div class="pf-cover-thumb" style="border-radius:6px;background:var(--gray-l)"></div>`
-      }
+      <div class="pf-cover-thumb" id="admcover-${a.id}" style="border-radius:6px;background:var(--gray-l);overflow:hidden">
+        <img src="" alt="${a.title}" style="width:100%;height:100%;object-fit:cover;display:none" />
+      </div>
       <div class="pf-album-info">
         <p class="pf-album-name">${a.title}</p>
         <p class="pf-album-meta">
@@ -986,6 +1003,19 @@ function pfRenderAlbumList() {
       </div>
     </div>`;
   }).join('');
+  /* Load covers from IndexedDB */
+  try {
+    const allData = await _idbGetAll();
+    const coverMap = {};
+    allData.forEach(d => { if (d.cover) coverMap[d.albumId] = d.cover; });
+    albums.forEach(a => {
+      const wrap = document.getElementById('admcover-' + a.id);
+      if (wrap && coverMap[a.id]) {
+        const img = wrap.querySelector('img');
+        if (img) { img.src = coverMap[a.id]; img.style.display = 'block'; }
+      }
+    });
+  } catch (_) {}
 }
 </script>
 </body>
