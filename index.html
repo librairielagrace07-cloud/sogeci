@@ -1691,23 +1691,28 @@ document.addEventListener('keydown', e => {
   }, { passive:true });
 })();
 
-/* --- Config loader (depuis admin.html / localStorage) --- */
-(function applySGCIConfig() {
-  const cfg = JSON.parse(localStorage.getItem('sgci_config') || '{}');
-  // undefined = jamais configuré (on garde le HTML par défaut)
-  // '' = explicitement effacé (on ne touche pas non plus — le défaut HTML reste)
-  // string non-vide = valeur à appliquer
+/* --- Config loader (Firebase en priorité, localStorage en fallback) --- */
+let WHATSAPP_NUMBER = (JSON.parse(localStorage.getItem('sgci_config') || '{}')).contact_whatsapp || '2250546493904';
+
+(async function applySGCIConfig() {
+  let cfg = JSON.parse(localStorage.getItem('sgci_config') || '{}');
+
+  /* Firebase en priorité : données visibles par tous les visiteurs */
+  if (_fbDb) {
+    try {
+      const doc = await _fbDb.collection('config').doc('main').get();
+      if (doc.exists) cfg = { ...cfg, ...doc.data() };
+    } catch(e) {}
+  }
+
   const set = (id, val) => { if (val) { const el = document.getElementById(id); if (el) el.textContent = val; } };
   const setHTML = (id, val) => { if (val) { const el = document.getElementById(id); if (el) el.innerHTML = val; } };
   const setPhoto = (id, val) => { if (val) { const el = document.getElementById(id); if (el) { el.src = val; el.removeAttribute('loading'); } } };
   const setVideo = (id, val) => {
     const el = document.getElementById(id);
     if (!el) return;
-    if (val) {
-      el.src = 'https://www.youtube.com/embed/' + val;
-    } else if (val === '') {
-      el.src = 'about:blank';
-    }
+    if (val) { el.src = 'https://www.youtube.com/embed/' + val; }
+    else if (val === '') { el.src = 'about:blank'; }
   };
   setPhoto('sgci-dg-photo', cfg.dg_photo);   setPhoto('sgci-dg-photo-motdg', cfg.dg_photo);
   set('sgci-dg-name', cfg.dg_name);   set('sgci-dg-role', cfg.dg_role);   set('sgci-dg-badge', cfg.dg_badge);
@@ -1718,12 +1723,10 @@ document.addEventListener('keydown', e => {
   setPhoto('sgci-sec-photo', cfg.sec_photo); set('sgci-sec-name', cfg.sec_name); set('sgci-sec-role', cfg.sec_role); set('sgci-sec-badge', cfg.sec_badge);
   setVideo('sgci-video1', cfg.video1_id); setVideo('sgci-video2', cfg.video2_id); setVideo('sgci-video3', cfg.video3_id);
   setHTML('sgci-contact-phones', cfg.contact_phones); setHTML('sgci-contact-emails', cfg.contact_emails);
+  if (cfg.contact_whatsapp) WHATSAPP_NUMBER = cfg.contact_whatsapp;
 })();
 
 pfRenderAlbums('tous');
-
-/* --- Contact form → WhatsApp --- */
-const WHATSAPP_NUMBER = (JSON.parse(localStorage.getItem('sgci_config') || '{}')).contact_whatsapp || '2250546493904';
 const contactForm = document.getElementById('contactForm');
 const formSuccess = document.getElementById('formSuccess');
 const emailRx = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

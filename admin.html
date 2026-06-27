@@ -752,6 +752,14 @@ function saveConfig(silent = false) {
 
   // Portfolio albums managed separately — preserve existing value
   localStorage.setItem('sgci_config', JSON.stringify(cfg));
+
+  /* Sync Firebase : toutes les infos du site visibles par tous */
+  if (_fbDb) {
+    const toSync = Object.fromEntries(Object.entries(cfg).filter(([k]) => k !== 'portfolio_albums'));
+    _fbDb.collection('config').doc('main').set(toSync, { merge: true })
+      .catch(e => console.warn('Firebase config:', e));
+  }
+
   const s = document.getElementById('save-status');
   s.textContent = silent ? '✓ Sauvegardé automatiquement' : '✓ Enregistré avec succès !';
   s.className = 'save-status ok';
@@ -812,8 +820,20 @@ async function pfMigrateOldAlbums() {
   }
 }
 
-function loadForm() {
-  const cfg = JSON.parse(localStorage.getItem('sgci_config') || '{}');
+async function loadForm() {
+  let cfg = JSON.parse(localStorage.getItem('sgci_config') || '{}');
+
+  /* Firebase en priorité : support multi-appareil */
+  if (_fbDb) {
+    try {
+      const doc = await _fbDb.collection('config').doc('main').get();
+      if (doc.exists) {
+        cfg = { ...cfg, ...doc.data() };
+        try { localStorage.setItem('sgci_config', JSON.stringify(cfg)); } catch(_) {}
+      }
+    } catch(e) {}
+  }
+
   const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
   // Équipe
   ['dg','m1','m2','m3','sec'].forEach(k => {
