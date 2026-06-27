@@ -547,13 +547,12 @@
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <script>
-/* ─── Firebase (cloud sync) ───────────────────────────────────────────
+/* ─── Firebase (cloud sync — Firestore uniquement, forfait Spark gratuit) ──
    1. Créez un projet sur https://console.firebase.google.com
-   2. Activez Firestore Database + Storage (mode Test pour débuter)
+   2. Activez Firestore Database (mode Test)
    3. Ajoutez une app Web, copiez la config et remplacez les valeurs ci-dessous
-   ─────────────────────────────────────────────────────────────────────── */
+   ─────────────────────────────────────────────────────────────────────────── */
 const FIREBASE_CONFIG = {
   apiKey:            "REMPLACER",
   authDomain:        "REMPLACER.firebaseapp.com",
@@ -562,61 +561,64 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "REMPLACER",
   appId:             "REMPLACER"
 };
-let _fbDb = null, _fbSt = null;
+let _fbDb = null;
 (function() {
-  if (FIREBASE_CONFIG.apiKey === 'REMPLACER') return; /* non configuré */
+  if (FIREBASE_CONFIG.apiKey === 'REMPLACER') return;
   try {
     firebase.initializeApp(FIREBASE_CONFIG);
     _fbDb = firebase.firestore();
-    _fbSt = firebase.storage();
   } catch(e) { console.warn('Firebase init:', e.message); }
 })();
 
-async function _fbUpload(path, dataUrl) {
-  const ref = _fbSt.ref(path);
-  await ref.putString(dataUrl, 'data_url', { contentType: 'image/jpeg' });
-  return ref.getDownloadURL();
-}
-
+/* Structure Firestore :
+   albums/{albumId}           → métadonnées + couverture base64
+   albums/{albumId}/photos/0  → { src: base64, caption, order } (une photo par doc)
+*/
 async function _fbSyncAlbum(albumId, meta, coverData, photosData) {
   const docRef = _fbDb.collection('albums').doc(albumId);
   const snap   = await docRef.get();
   const prev   = snap.exists ? snap.data() : {};
 
-  /* Couverture */
-  let coverUrl = prev.coverUrl || '';
+  /* Couverture : recompresser à 800×600 q0.85 pour alléger Firestore */
+  let coverBase64 = prev.coverBase64 || '';
   if (coverData && coverData.startsWith('data:')) {
-    coverUrl = await _fbUpload(`albums/${albumId}/cover`, coverData);
+    coverBase64 = await pfCompress(coverData, 800, 600, 0.85);
   }
 
-  /* Photos : uploader base64, conserver les URL existantes */
-  const photoUrls = [];
-  for (let i = 0; i < photosData.length; i++) {
-    const p = photosData[i];
-    if (p.src && p.src.startsWith('data:')) {
-      const url = await _fbUpload(`albums/${albumId}/p${i}_${Date.now()}`, p.src);
-      photoUrls.push({ src: url, caption: p.caption || '' });
-    } else if (p.src) {
-      photoUrls.push({ src: p.src, caption: p.caption || '' });
-    }
-  }
-
+  /* Document principal */
   const fsDoc = {
     id: albumId, title: meta.title, subtitle: meta.subtitle || '',
-    category: meta.category, photoCount: photoUrls.length,
-    coverUrl, photoUrls,
+    category: meta.category, photoCount: photosData.length,
+    coverBase64,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
   };
   if (!snap.exists) fsDoc.createdAt = firebase.firestore.FieldValue.serverTimestamp();
   await docRef.set(fsDoc, { merge: true });
+
+  /* Sous-collection photos : supprimer les anciens puis écrire les nouveaux */
+  const oldSnap = await docRef.collection('photos').get();
+  const delBatch = _fbDb.batch();
+  oldSnap.docs.forEach(d => delBatch.delete(d.ref));
+  if (!oldSnap.empty) await delBatch.commit();
+
+  if (photosData.length) {
+    const addBatch = _fbDb.batch();
+    photosData.forEach((p, i) => {
+      addBatch.set(docRef.collection('photos').doc(String(i)), {
+        src: p.src || '', caption: p.caption || '', order: i
+      });
+    });
+    await addBatch.commit();
+  }
 }
 
 async function _fbDeleteAlbum(albumId) {
-  await _fbDb.collection('albums').doc(albumId).delete();
-  try {
-    const list = await _fbSt.ref(`albums/${albumId}`).listAll();
-    await Promise.all(list.items.map(f => f.delete()));
-  } catch(e) {}
+  const docRef = _fbDb.collection('albums').doc(albumId);
+  const photos = await docRef.collection('photos').get();
+  const batch  = _fbDb.batch();
+  photos.docs.forEach(d => batch.delete(d.ref));
+  batch.delete(docRef);
+  await batch.commit();
 }
 
 async function pfMigrateAllToFirebase() {
@@ -1086,14 +1088,18 @@ function pfEditAlbum(id) {
     let cover  = idbData.cover  || '';
     let photos = idbData.photos || [];
 
-    /* Firebase a priorité : URLs haute qualité stockées dans le cloud */
+    /* Firebase a priorité : données cloud disponibles partout */
     if (_fbDb) {
       try {
         const doc = await _fbDb.collection('albums').doc(id).get();
         if (doc.exists) {
           const d = doc.data();
-          if (d.coverUrl)                         cover  = d.coverUrl;
-          if (d.photoUrls && d.photoUrls.length)  photos = d.photoUrls;
+          if (d.coverBase64) cover = d.coverBase64;
+          const photoSnap = await _fbDb.collection('albums').doc(id)
+            .collection('photos').orderBy('order').get();
+          if (!photoSnap.empty) {
+            photos = photoSnap.docs.map(d => ({ src: d.data().src, caption: d.data().caption || '' }));
+          }
         }
       } catch(e) {}
     }

@@ -1394,7 +1394,7 @@
 <script>
 "use strict";
 
-/* ─── Firebase (lecture des albums cloud) ─── */
+/* ─── Firebase (lecture des albums cloud — Firestore uniquement) ─── */
 const FIREBASE_CONFIG = {
   apiKey:            "REMPLACER",
   authDomain:        "REMPLACER.firebaseapp.com",
@@ -1545,9 +1545,9 @@ async function pfRenderAlbums(cat) {
   }
 
   grid.innerHTML = albums.map((a, i) => {
-    const isFb     = !!a.coverUrl; /* album Firebase → coverUrl est une URL https */
+    const isFb     = !!a.coverBase64; /* album Firebase → coverBase64 en base64 */
     const count    = a.photoCount !== undefined ? a.photoCount : (a.photos ? a.photos.length : 0);
-    const coverSrc = isFb ? a.coverUrl : (a.photoCount === undefined ? (a.cover || '') : '');
+    const coverSrc = isFb ? a.coverBase64 : (a.photoCount === undefined ? (a.cover || '') : '');
     return `
     <div class="album-card reveal" style="transition-delay:${i * .08}s" onclick="pfOpenLightbox('${a.id}',0)" role="button" tabindex="0" aria-label="Ouvrir l'album ${a.title}">
       <div class="album-card__cover">
@@ -1572,14 +1572,14 @@ async function pfRenderAlbums(cat) {
   });
 
   /* Pour les albums locaux (non Firebase), charger les covers depuis IndexedDB */
-  const hasLocalAlbums = albums.some(a => a.photoCount !== undefined && !a.coverUrl);
+  const hasLocalAlbums = albums.some(a => a.photoCount !== undefined && !a.coverBase64);
   if (hasLocalAlbums) {
     try {
       const allData = await _idbGetAll();
       const coverMap = {};
       allData.forEach(d => { if (d.cover) coverMap[d.albumId] = d.cover; });
       albums.forEach(a => {
-        if (a.photoCount !== undefined && !a.coverUrl) {
+        if (a.photoCount !== undefined && !a.coverBase64) {
           const img = document.getElementById('acover-' + a.id);
           if (img && coverMap[a.id]) { img.src = coverMap[a.id]; img.removeAttribute('style'); }
         }
@@ -1600,13 +1600,16 @@ document.querySelectorAll('.pf-tab').forEach(btn => {
 let _lbAlbum = null, _lbIndex = 0;
 
 async function pfOpenLightbox(albumId, startIndex) {
-  /* 1. Firebase d'abord */
+  /* 1. Firebase d'abord : lire la sous-collection photos */
   if (_fbDb) {
     try {
-      const doc = await _fbDb.collection('albums').doc(albumId).get();
-      if (doc.exists) {
+      const doc       = await _fbDb.collection('albums').doc(albumId).get();
+      const photoSnap = await _fbDb.collection('albums').doc(albumId)
+        .collection('photos').orderBy('order').get();
+      if (doc.exists && !photoSnap.empty) {
         const data   = doc.data();
-        const photos = (data.photoUrls || []).filter(p => p && p.src);
+        const photos = photoSnap.docs.map(d => ({ src: d.data().src, caption: d.data().caption || '' }))
+          .filter(p => p.src);
         if (photos.length) {
           _lbAlbum = { title: data.title, photos };
           _lbIndex = Math.max(0, Math.min(startIndex || 0, photos.length - 1));
