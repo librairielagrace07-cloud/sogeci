@@ -575,6 +575,18 @@ let _fbDb = null;
    albums/{albumId}           → métadonnées + couverture base64
    albums/{albumId}/photos/0  → { src: base64, caption, order } (une photo par doc)
 */
+/* Compresse toutes les photos d'équipe avant écriture Firestore (limite 1 Mo/champ) */
+async function _compressConfigPhotos(obj) {
+  const keys = ['dg_photo','m1_photo','m2_photo','m3_photo','sec_photo'];
+  const result = Object.assign({}, obj);
+  for (const k of keys) {
+    if (result[k] && result[k].startsWith('data:')) {
+      try { result[k] = await pfCompress(result[k], 350, 350, 0.72); } catch(_) {}
+    }
+  }
+  return result;
+}
+
 async function _fbSyncAlbum(albumId, meta, coverData, photosData) {
   const docRef = _fbDb.collection('albums').doc(albumId);
   const snap   = await docRef.get();
@@ -651,10 +663,11 @@ async function publishAll() {
   saveConfig(true, true);  // silent=true, skipFirebase=true
   const cfg = JSON.parse(localStorage.getItem('sgci_config') || '{}');
 
-  /* 2. Sync config → Firestore config/main */
+  /* 2. Sync config → Firestore config/main (photos compressées pour tenir sous 1 Mo/champ) */
   s.textContent = '☁ Publication config…'; s.className = 'save-status ok';
   try {
-    const toSync = Object.fromEntries(Object.entries(cfg).filter(([k]) => k !== 'portfolio_albums'));
+    const base    = Object.fromEntries(Object.entries(cfg).filter(([k]) => k !== 'portfolio_albums'));
+    const toSync  = await _compressConfigPhotos(base);
     await _fbDb.collection('config').doc('main').set(toSync, { merge: true });
     s.textContent = '✓ Config publiée – albums en cours…'; s.className = 'save-status ok';
   } catch(e) {
@@ -801,21 +814,23 @@ function saveConfig(silent = false, skipFirebase = false) {
 
   /* Sync Firebase : toutes les infos du site visibles par tous */
   if (_fbDb) {
-    const toSync = Object.fromEntries(Object.entries(cfg).filter(([k]) => k !== 'portfolio_albums'));
     s.textContent = silent ? '✓ Sauvegardé (sync…)' : '✓ Enregistré – publication Firebase…';
     s.className = 'save-status ok';
-    _fbDb.collection('config').doc('main').set(toSync, { merge: true })
-      .then(() => {
+    (async () => {
+      try {
+        const base = Object.fromEntries(Object.entries(cfg).filter(([k]) => k !== 'portfolio_albums'));
+        const toSync = await _compressConfigPhotos(base);
+        await _fbDb.collection('config').doc('main').set(toSync, { merge: true });
         s.textContent = '✓ Publié sur Firebase';
         s.className = 'save-status ok';
         setTimeout(() => { s.textContent = ''; s.className = 'save-status'; }, 3000);
-      })
-      .catch(e => {
+      } catch(e) {
         console.warn('Firebase config:', e);
         s.textContent = '⚠ Erreur Firebase : ' + (e.message || e.code || e);
         s.className = 'save-status err';
         setTimeout(() => { s.textContent = ''; s.className = 'save-status'; }, 8000);
-      });
+      }
+    })();
   } else {
     s.textContent = silent ? '✓ Sauvegardé automatiquement' : '✓ Enregistré avec succès !';
     s.className = 'save-status ok';
