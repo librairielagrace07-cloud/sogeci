@@ -520,10 +520,13 @@
 
     <!-- Liste des albums -->
     <div class="section-card">
-      <p class="section-card__title">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-        Albums (<span id="pf-album-count">0</span>)
-      </p>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:.75rem">
+        <p class="section-card__title" style="margin-bottom:0">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          Albums (<span id="pf-album-count">0</span>)
+        </p>
+        <button id="pf-sync-btn" onclick="pfMigrateAllToFirebase()" style="background:var(--primary);color:#fff;border:none;border-radius:8px;padding:.4rem .9rem;font-size:.8rem;font-weight:600;cursor:pointer">☁ Publier sur Firebase</button>
+      </div>
       <div id="pf-album-list">
         <p style="color:var(--gray);font-size:.875rem;text-align:center;padding:2rem 0">Aucun album. Créez votre premier album ci-dessus.</p>
       </div>
@@ -542,7 +545,99 @@
   </div>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <script>
+/* ─── Firebase (cloud sync) ───────────────────────────────────────────
+   1. Créez un projet sur https://console.firebase.google.com
+   2. Activez Firestore Database + Storage (mode Test pour débuter)
+   3. Ajoutez une app Web, copiez la config et remplacez les valeurs ci-dessous
+   ─────────────────────────────────────────────────────────────────────── */
+const FIREBASE_CONFIG = {
+  apiKey:            "REMPLACER",
+  authDomain:        "REMPLACER.firebaseapp.com",
+  projectId:         "REMPLACER",
+  storageBucket:     "REMPLACER.appspot.com",
+  messagingSenderId: "REMPLACER",
+  appId:             "REMPLACER"
+};
+let _fbDb = null, _fbSt = null;
+(function() {
+  if (FIREBASE_CONFIG.apiKey === 'REMPLACER') return; /* non configuré */
+  try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    _fbDb = firebase.firestore();
+    _fbSt = firebase.storage();
+  } catch(e) { console.warn('Firebase init:', e.message); }
+})();
+
+async function _fbUpload(path, dataUrl) {
+  const ref = _fbSt.ref(path);
+  await ref.putString(dataUrl, 'data_url', { contentType: 'image/jpeg' });
+  return ref.getDownloadURL();
+}
+
+async function _fbSyncAlbum(albumId, meta, coverData, photosData) {
+  const docRef = _fbDb.collection('albums').doc(albumId);
+  const snap   = await docRef.get();
+  const prev   = snap.exists ? snap.data() : {};
+
+  /* Couverture */
+  let coverUrl = prev.coverUrl || '';
+  if (coverData && coverData.startsWith('data:')) {
+    coverUrl = await _fbUpload(`albums/${albumId}/cover`, coverData);
+  }
+
+  /* Photos : uploader base64, conserver les URL existantes */
+  const photoUrls = [];
+  for (let i = 0; i < photosData.length; i++) {
+    const p = photosData[i];
+    if (p.src && p.src.startsWith('data:')) {
+      const url = await _fbUpload(`albums/${albumId}/p${i}_${Date.now()}`, p.src);
+      photoUrls.push({ src: url, caption: p.caption || '' });
+    } else if (p.src) {
+      photoUrls.push({ src: p.src, caption: p.caption || '' });
+    }
+  }
+
+  const fsDoc = {
+    id: albumId, title: meta.title, subtitle: meta.subtitle || '',
+    category: meta.category, photoCount: photoUrls.length,
+    coverUrl, photoUrls,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  if (!snap.exists) fsDoc.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+  await docRef.set(fsDoc, { merge: true });
+}
+
+async function _fbDeleteAlbum(albumId) {
+  await _fbDb.collection('albums').doc(albumId).delete();
+  try {
+    const list = await _fbSt.ref(`albums/${albumId}`).listAll();
+    await Promise.all(list.items.map(f => f.delete()));
+  } catch(e) {}
+}
+
+async function pfMigrateAllToFirebase() {
+  if (!_fbDb) { alert('Firebase non configuré. Remplissez FIREBASE_CONFIG dans admin.html.'); return; }
+  const albums = pfGetAlbums();
+  if (!albums.length) { alert('Aucun album local à synchroniser.'); return; }
+  const btn = document.getElementById('pf-sync-btn');
+  const s   = document.getElementById('save-status');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Sync…'; }
+  for (let i = 0; i < albums.length; i++) {
+    const a = albums[i];
+    if (s) { s.textContent = `☁ ${i+1}/${albums.length} : ${a.title}…`; s.className = 'save-status ok'; }
+    try {
+      const idb = await _idbGet(a.id);
+      await _fbSyncAlbum(a.id, a, idb.cover || null, idb.photos || []);
+    } catch(e) { console.error('Sync', a.id, e); }
+  }
+  if (s) { s.textContent = '✓ Tous les albums publiés sur Firebase'; s.className = 'save-status ok'; setTimeout(() => { s.textContent = ''; s.className = 'save-status'; }, 4000); }
+  if (btn) { btn.disabled = false; btn.textContent = '☁ Publier sur Firebase'; }
+}
+
 /* ─── Auth ─── */
 const ADMIN_PWD_KEY = 'sgci_admin_pwd';
 const DEFAULT_PWD   = 'sgci2024';
@@ -925,11 +1020,23 @@ async function pfSaveAlbum() {
     }
     pfSetAlbums(albums);
 
+    /* Capturer avant pfCancelEdit() qui efface _pfCoverData */
+    const coverToSync  = _pfCoverData;
+    const photosToSync = finalPhotos.slice();
+
     pfCancelEdit();
     pfRenderAlbumList();
     const s = document.getElementById('save-status');
-    s.textContent = '✓ Album enregistré'; s.className = 'save-status ok';
-    setTimeout(() => { s.textContent = ''; s.className = 'save-status'; }, 2500);
+
+    if (_fbDb) {
+      s.textContent = '☁ Publication en ligne…'; s.className = 'save-status ok';
+      _fbSyncAlbum(albumId, meta, coverToSync, photosToSync)
+        .then(() => { s.textContent = '✓ Album publié en ligne'; s.className = 'save-status ok'; setTimeout(() => { s.textContent = ''; s.className = 'save-status'; }, 3000); })
+        .catch(e  => { s.textContent = '⚠ Firebase: ' + (e.message || e); s.className = 'save-status err'; setTimeout(() => { s.textContent = ''; s.className = 'save-status'; }, 6000); });
+    } else {
+      s.textContent = '✓ Album enregistré (localement)'; s.className = 'save-status ok';
+      setTimeout(() => { s.textContent = ''; s.className = 'save-status'; }, 2500);
+    }
   } catch (err) {
     console.error('pfSaveAlbum:', err);
     const s = document.getElementById('save-status');
@@ -945,6 +1052,7 @@ async function pfDeleteAlbum(id) {
   if (!confirm('Supprimer cet album et toutes ses photos ?')) return;
   await _idbDel(id);
   pfSetAlbums(pfGetAlbums().filter(a => a.id !== id));
+  if (_fbDb) _fbDeleteAlbum(id).catch(e => console.warn('Firebase delete:', e));
   pfRenderAlbumList();
 }
 
@@ -972,16 +1080,30 @@ function pfEditAlbum(id) {
   const firstCard = document.querySelector('#tab-portfolio .section-card');
   if (firstCard) firstCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-  /* ── Partie ASYNC : charge cover + photos depuis IndexedDB ── */
-  _idbGet(id).then(idbData => {
-    if (_pfEditId !== id) return; /* L'utilisateur a changé d'album entretemps */
-    if (idbData.cover) { coverImg.src = idbData.cover; coverImg.style.display = 'block'; }
-    /* Merger : photos DB existantes + photos déjà ajoutées par l'utilisateur (race condition) */
+  /* ── Partie ASYNC : charge cover + photos (IndexedDB puis Firebase) ── */
+  _idbGet(id).then(async idbData => {
+    if (_pfEditId !== id) return;
+    let cover  = idbData.cover  || '';
+    let photos = idbData.photos || [];
+
+    /* Firebase a priorité : URLs haute qualité stockées dans le cloud */
+    if (_fbDb) {
+      try {
+        const doc = await _fbDb.collection('albums').doc(id).get();
+        if (doc.exists) {
+          const d = doc.data();
+          if (d.coverUrl)                         cover  = d.coverUrl;
+          if (d.photoUrls && d.photoUrls.length)  photos = d.photoUrls;
+        }
+      } catch(e) {}
+    }
+
+    if (cover) { coverImg.src = cover; coverImg.style.display = 'block'; }
     const alreadyAdded = _pfPhotosData.slice();
-    _pfPhotosData = [...(idbData.photos || []), ...alreadyAdded];
+    _pfPhotosData = [...photos, ...alreadyAdded];
     pfRenderPhotoStrip();
   }).catch(err => {
-    console.warn('pfEditAlbum: IndexedDB non disponible', err);
+    console.warn('pfEditAlbum:', err);
   });
 }
 

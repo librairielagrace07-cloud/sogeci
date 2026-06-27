@@ -1389,8 +1389,26 @@
   </div>
 </footer>
 
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script>
 "use strict";
+
+/* ─── Firebase (lecture des albums cloud) ─── */
+const FIREBASE_CONFIG = {
+  apiKey:            "REMPLACER",
+  authDomain:        "REMPLACER.firebaseapp.com",
+  projectId:         "REMPLACER",
+  storageBucket:     "REMPLACER.appspot.com",
+  messagingSenderId: "REMPLACER",
+  appId:             "REMPLACER"
+};
+let _fbDb = null;
+(function() {
+  if (FIREBASE_CONFIG.apiKey === 'REMPLACER') return;
+  try { firebase.initializeApp(FIREBASE_CONFIG); _fbDb = firebase.firestore(); }
+  catch(e) { console.warn('Firebase:', e.message); }
+})();
 
 /* --- Header scroll --- */
 const header = document.getElementById('header');
@@ -1508,15 +1526,28 @@ function pfGetAlbums() {
 
 async function pfRenderAlbums(cat) {
   const grid = document.getElementById('albumGrid');
-  const albums = pfGetAlbums().filter(a => cat === 'tous' || a.category === cat);
+
+  /* 1. Firebase d'abord (données visibles par tous les visiteurs) */
+  let allAlbums = null;
+  if (_fbDb) {
+    try {
+      const snap = await _fbDb.collection('albums').orderBy('createdAt').get();
+      if (!snap.empty) allAlbums = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch(e) {}
+  }
+  /* 2. Fallback : local (admin même navigateur) ou albums démo */
+  if (!allAlbums) allAlbums = pfGetAlbums();
+
+  const albums = allAlbums.filter(a => cat === 'tous' || a.category === cat);
   if (!albums.length) {
     grid.innerHTML = '<p class="album-empty">Aucun album dans cette catégorie.<br>Ajoutez-en depuis la page Admin.</p>';
     return;
   }
-  const hasUserAlbums = albums.some(a => a.photoCount !== undefined);
+
   grid.innerHTML = albums.map((a, i) => {
+    const isFb     = !!a.coverUrl; /* album Firebase → coverUrl est une URL https */
     const count    = a.photoCount !== undefined ? a.photoCount : (a.photos ? a.photos.length : 0);
-    const coverSrc = a.photoCount === undefined ? (a.cover || '') : ''; /* albums admin: couverture via IndexedDB */
+    const coverSrc = isFb ? a.coverUrl : (a.photoCount === undefined ? (a.cover || '') : '');
     return `
     <div class="album-card reveal" style="transition-delay:${i * .08}s" onclick="pfOpenLightbox('${a.id}',0)" role="button" tabindex="0" aria-label="Ouvrir l'album ${a.title}">
       <div class="album-card__cover">
@@ -1534,18 +1565,21 @@ async function pfRenderAlbums(cat) {
       </div>
     </div>`;
   }).join('');
+
   grid.querySelectorAll('.album-card').forEach(el => {
     revealObs.observe(el);
     el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') el.click(); });
   });
-  /* Charge les couvertures depuis IndexedDB pour les albums admin */
-  if (hasUserAlbums) {
+
+  /* Pour les albums locaux (non Firebase), charger les covers depuis IndexedDB */
+  const hasLocalAlbums = albums.some(a => a.photoCount !== undefined && !a.coverUrl);
+  if (hasLocalAlbums) {
     try {
       const allData = await _idbGetAll();
       const coverMap = {};
       allData.forEach(d => { if (d.cover) coverMap[d.albumId] = d.cover; });
       albums.forEach(a => {
-        if (a.photoCount !== undefined) {
+        if (a.photoCount !== undefined && !a.coverUrl) {
           const img = document.getElementById('acover-' + a.id);
           if (img && coverMap[a.id]) { img.src = coverMap[a.id]; img.removeAttribute('style'); }
         }
@@ -1566,10 +1600,29 @@ document.querySelectorAll('.pf-tab').forEach(btn => {
 let _lbAlbum = null, _lbIndex = 0;
 
 async function pfOpenLightbox(albumId, startIndex) {
+  /* 1. Firebase d'abord */
+  if (_fbDb) {
+    try {
+      const doc = await _fbDb.collection('albums').doc(albumId).get();
+      if (doc.exists) {
+        const data   = doc.data();
+        const photos = (data.photoUrls || []).filter(p => p && p.src);
+        if (photos.length) {
+          _lbAlbum = { title: data.title, photos };
+          _lbIndex = Math.max(0, Math.min(startIndex || 0, photos.length - 1));
+          document.getElementById('lbAlbumTitle').textContent = data.title;
+          _lbRender();
+          document.getElementById('lightbox').classList.add('open');
+          document.body.style.overflow = 'hidden';
+          return;
+        }
+      }
+    } catch(e) {}
+  }
+
+  /* 2. Fallback local / démo */
   const meta = pfGetAlbums().find(a => a.id === albumId);
   if (!meta) return;
-
-  /* Albums démo → photos inline. Albums admin → IndexedDB. */
   let photos;
   if (meta.photoCount !== undefined) {
     const data = await _idbGet(albumId);
@@ -1577,7 +1630,6 @@ async function pfOpenLightbox(albumId, startIndex) {
   } else {
     photos = meta.photos || [];
   }
-
   if (!photos.length) return;
   _lbAlbum = { ...meta, photos };
   _lbIndex = startIndex || 0;
