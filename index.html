@@ -1702,7 +1702,7 @@ let WHATSAPP_NUMBER = (JSON.parse(localStorage.getItem('sgci_config') || '{}')).
     try {
       const doc = await _fbDb.collection('config').doc('main').get();
       if (doc.exists) cfg = { ...cfg, ...doc.data() };
-    } catch(e) {}
+    } catch(e) { console.warn('Firebase config read:', e.message || e); }
   }
 
   const set = (id, val) => { if (val) { const el = document.getElementById(id); if (el) el.textContent = val; } };

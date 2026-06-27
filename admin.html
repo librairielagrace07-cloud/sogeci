@@ -542,6 +542,7 @@
   <div class="save-actions">
     <button class="btn-reset" onclick="resetConfig()">Réinitialiser</button>
     <button class="btn-save" onclick="saveConfig()">Enregistrer les modifications</button>
+    <button id="publish-all-btn" class="btn-save" onclick="publishAll()" style="background:var(--primary);margin-left:.5rem">☁ Publier tout sur Firebase</button>
   </div>
 </div>
 
@@ -640,6 +641,48 @@ async function pfMigrateAllToFirebase() {
   if (btn) { btn.disabled = false; btn.textContent = '☁ Publier sur Firebase'; }
 }
 
+async function publishAll() {
+  if (!_fbDb) { alert('Firebase non configuré. Vérifiez FIREBASE_CONFIG dans admin.html.'); return; }
+  const s   = document.getElementById('save-status');
+  const btn = document.getElementById('publish-all-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Publication…'; }
+
+  /* 1. Sauvegarder le formulaire en localStorage (sans déclencher le sync Firebase de saveConfig) */
+  saveConfig(true, true);  // silent=true, skipFirebase=true
+  const cfg = JSON.parse(localStorage.getItem('sgci_config') || '{}');
+
+  /* 2. Sync config → Firestore config/main */
+  s.textContent = '☁ Publication config…'; s.className = 'save-status ok';
+  try {
+    const toSync = Object.fromEntries(Object.entries(cfg).filter(([k]) => k !== 'portfolio_albums'));
+    await _fbDb.collection('config').doc('main').set(toSync, { merge: true });
+    s.textContent = '✓ Config publiée – albums en cours…'; s.className = 'save-status ok';
+  } catch(e) {
+    s.textContent = '⚠ Erreur config Firebase : ' + (e.message || e.code || e);
+    s.className = 'save-status err';
+    if (btn) { btn.disabled = false; btn.textContent = '☁ Publier tout sur Firebase'; }
+    return;
+  }
+
+  /* 3. Sync albums → Firestore albums/{id} */
+  const albums = pfGetAlbums();
+  for (let i = 0; i < albums.length; i++) {
+    const a = albums[i];
+    s.textContent = `☁ Album ${i+1}/${albums.length} : ${a.title}…`; s.className = 'save-status ok';
+    try {
+      const idb = await _idbGet(a.id);
+      await _fbSyncAlbum(a.id, a, idb.cover || null, idb.photos || []);
+    } catch(e) { console.error('Sync album', a.id, e); }
+  }
+
+  s.textContent = albums.length
+    ? `✓ Tout publié sur Firebase (config + ${albums.length} album${albums.length>1?'s':''})`
+    : '✓ Config publiée sur Firebase';
+  s.className = 'save-status ok';
+  setTimeout(() => { s.textContent = ''; s.className = 'save-status'; }, 5000);
+  if (btn) { btn.disabled = false; btn.textContent = '☁ Publier tout sur Firebase'; }
+}
+
 /* ─── Auth ─── */
 const ADMIN_PWD_KEY = 'sgci_admin_pwd';
 const DEFAULT_PWD   = 'sgci2024';
@@ -721,7 +764,7 @@ function markUnsaved() { scheduleAutoSave(); }
 
 function v(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
 
-function saveConfig(silent = false) {
+function saveConfig(silent = false, skipFirebase = false) {
   clearTimeout(_autoSaveTimer);
   const cfg = JSON.parse(localStorage.getItem('sgci_config') || '{}');
   // Équipe — toujours sauvegarder (même vide, pour permettre l'effacement)
@@ -753,17 +796,31 @@ function saveConfig(silent = false) {
   // Portfolio albums managed separately — preserve existing value
   localStorage.setItem('sgci_config', JSON.stringify(cfg));
 
+  const s = document.getElementById('save-status');
+  if (skipFirebase) return;   // publishAll() s'occupe du sync Firebase lui-même
+
   /* Sync Firebase : toutes les infos du site visibles par tous */
   if (_fbDb) {
     const toSync = Object.fromEntries(Object.entries(cfg).filter(([k]) => k !== 'portfolio_albums'));
+    s.textContent = silent ? '✓ Sauvegardé (sync…)' : '✓ Enregistré – publication Firebase…';
+    s.className = 'save-status ok';
     _fbDb.collection('config').doc('main').set(toSync, { merge: true })
-      .catch(e => console.warn('Firebase config:', e));
+      .then(() => {
+        s.textContent = '✓ Publié sur Firebase';
+        s.className = 'save-status ok';
+        setTimeout(() => { s.textContent = ''; s.className = 'save-status'; }, 3000);
+      })
+      .catch(e => {
+        console.warn('Firebase config:', e);
+        s.textContent = '⚠ Erreur Firebase : ' + (e.message || e.code || e);
+        s.className = 'save-status err';
+        setTimeout(() => { s.textContent = ''; s.className = 'save-status'; }, 8000);
+      });
+  } else {
+    s.textContent = silent ? '✓ Sauvegardé automatiquement' : '✓ Enregistré avec succès !';
+    s.className = 'save-status ok';
+    setTimeout(() => { s.textContent = ''; s.className = 'save-status'; }, silent ? 2000 : 3000);
   }
-
-  const s = document.getElementById('save-status');
-  s.textContent = silent ? '✓ Sauvegardé automatiquement' : '✓ Enregistré avec succès !';
-  s.className = 'save-status ok';
-  setTimeout(() => { s.textContent = ''; s.className = 'save-status'; }, silent ? 2000 : 3000);
 }
 
 function resetConfig() {
